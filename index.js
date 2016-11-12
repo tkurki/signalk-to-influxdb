@@ -25,7 +25,6 @@ module.exports = function(app) {
 
   function handleDelta(delta) {
     if(delta.updates && delta.context === selfContext) {
-      console.log(delta)
       delta.updates.forEach(update => {
         if(update.values) {
           var points = update.values.reduce((acc, pathValue) => {
@@ -40,7 +39,6 @@ module.exports = function(app) {
             return acc
           }, [])
           if(points.length > 0) {
-            console.log(points)
             client.writePoints(points, function(err, response) {
               if(err) {
                 console.error(err)
