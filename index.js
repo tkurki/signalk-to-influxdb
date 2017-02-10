@@ -14,7 +14,6 @@
  */
 
 const Influx = require('influx')
-const camelCase = require('camelcase')
 const Bacon = require('baconjs')
 
 module.exports = function(app) {
@@ -30,7 +29,7 @@ module.exports = function(app) {
           var points = update.values.reduce((acc, pathValue) => {
             if(typeof pathValue.value === 'number') {
               acc.push({
-                measurement: camelCase(pathValue.path),
+                measurement: pathValue.path,
                 fields: {
                   value: pathValue.value
                 }
