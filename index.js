@@ -21,6 +21,8 @@ module.exports = function(app) {
   var selfContext = "vessels." + app.selfId
 
   var unsubscribes = []
+  var blacklist
+  var whitelist
 
   function handleDelta(delta) {
     if(delta.updates && delta.context === selfContext) {
@@ -28,12 +30,26 @@ module.exports = function(app) {
         if(update.values) {
           var points = update.values.reduce((acc, pathValue) => {
             if(typeof pathValue.value === 'number') {
-              acc.push({
-                measurement: pathValue.path,
-                fields: {
-                  value: pathValue.value
-                }
-              })
+              var storeIt
+              
+              if (typeof whitelist != 'undefined' && whitelist.length > 0 ) {
+                storeIt = whitelist.indexOf(pathValue.path) != -1
+              }
+              else if (typeof blacklist != 'undefined' && blacklist.length > 0 ){
+                storeIt = blacklist.indexOf(pathValue.path) == -1;
+              }
+              else {
+                storeIt = true
+              }
+                
+              if ( storeIt ) {
+                acc.push({
+                  measurement: pathValue.path,
+                  fields: {
+                    value: pathValue.value
+                  }
+                })
+              }
             }
             return acc
           }, [])
@@ -74,6 +90,24 @@ module.exports = function(app) {
         database: {
           type: "string",
           title: "Database"
+        },
+        whitelist: {
+          title: "Whitelist",
+          description: "Only store measurements for these paths",
+          type: "array",
+          "items": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
+        blacklist: {
+          title: "Blacklist",
+          description: "Don't store measurements for these paths",
+          type: "array",
+          "items": {
+            "type": "string",
+            "title": "Path"
+          }
         }
       }
     },
@@ -85,6 +119,9 @@ module.exports = function(app) {
         protocol: 'http', // optional, default 'http'
         database: options.database
       })
+
+      blacklist = options.blacklist
+      whitelist = options.whitelist
 
       app.signalk.on('delta', handleDelta)
 
