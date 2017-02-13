@@ -15,6 +15,8 @@
 
 const Influx = require('influx')
 const Bacon = require('baconjs')
+const debug = require('debug')('signalk-to-influxdb')
+const util = require('util')
 
 module.exports = function(app) {
   var client;
@@ -23,6 +25,7 @@ module.exports = function(app) {
   var unsubscribes = []
   var blacklist
   var whitelist
+  var listType
 
   function handleDelta(delta) {
     if(delta.updates && delta.context === selfContext) {
@@ -31,14 +34,12 @@ module.exports = function(app) {
           var points = update.values.reduce((acc, pathValue) => {
             if(typeof pathValue.value === 'number') {
               var storeIt
-              
-              if (typeof whitelist != 'undefined' && whitelist.length > 0 ) {
-                storeIt = whitelist.indexOf(pathValue.path) != -1
-              }
-              else if (typeof blacklist != 'undefined' && blacklist.length > 0 ){
-                storeIt = blacklist.indexOf(pathValue.path) == -1;
-              }
-              else {
+
+              if ( listType == 'White' ) {
+                storeIt = typeof whitelist[pathValue.path] != 'undefined'
+              } else if ( listType == 'Black' ) {
+                storeIt = typeof blacklist[pathValue.path] == 'undefined'
+              }  else {
                 storeIt = true
               }
                 
@@ -91,24 +92,22 @@ module.exports = function(app) {
           type: "string",
           title: "Database"
         },
-        whitelist: {
-          title: "Whitelist",
-          description: "Only store measurements for these paths",
+        blackOrWhite: {
+          "type": "string",
+          "title": "Type of List",
+          "description": "Choose if list of paths below is a white or black list.",
+          "default": "Black",
+          "enum": ["White", "Black"]
+        },        
+        blackOrWhitelist: {
+          title: "White or Black List",
+          description: "A white or black list based on selection above",
           type: "array",
           "items": {
             "type": "string",
             "title": "Path"
           }
         },
-        blacklist: {
-          title: "Blacklist",
-          description: "Don't store measurements for these paths",
-          type: "array",
-          "items": {
-            "type": "string",
-            "title": "Path"
-          }
-        }
       }
     },
 
@@ -120,8 +119,23 @@ module.exports = function(app) {
         database: options.database
       })
 
-      blacklist = options.blacklist
-      whitelist = options.whitelist
+      if ( typeof options.blackOrWhite != 'undefined'
+           && options.blackOrWhitelist.length > 0)
+      {
+        var obj = {}
+
+        for ( i = 0; i< options.blackOrWhitelist.length; i++ ) {
+          obj[options.blackOrWhitelist[i]] = true
+        }
+
+        listType = options.blackOrWhite
+        if ( options.blackOrWhite == 'White' ) {
+          whitelist = obj
+        } else {
+          blacklist = obj
+        }
+
+      }
 
       app.signalk.on('delta', handleDelta)
 
