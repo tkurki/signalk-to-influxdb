@@ -85,13 +85,13 @@ module.exports = function(app) {
         blackOrWhite: {
           "type": "string",
           "title": "Type of List",
-          "description": "Choose if list of paths below is a white or black list.",
+          "description": " With a blacklist, all numeric values excpet the ones int the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be sent.",
           "default": "Black",
           "enum": ["White", "Black"]
         },        
         blackOrWhitelist: {
-          title: "White or Black List",
-          description: "A white or black list based on selection above",
+          title: "SignalK Paths",
+          description: "A list of SignalK paths to be exluded or included based on selection above",
           type: "array",
           "items": {
             "type": "string",
