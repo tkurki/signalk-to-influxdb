@@ -85,7 +85,7 @@ module.exports = function(app) {
         blackOrWhite: {
           "type": "string",
           "title": "Type of List",
-          "description": " With a blacklist, all numeric values excpet the ones int the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be sent.",
+          "description": "With a blacklist, all numeric values except the ones in the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be stored.",
           "default": "Black",
           "enum": ["White", "Black"]
         },        
