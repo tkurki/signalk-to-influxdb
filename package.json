@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "baconjs": "^0.7.88",
+    "debug": "^2.2.0",
     "influx": "^5.0.0"
   }
 }
