@@ -23,9 +23,7 @@ module.exports = function(app) {
   var selfContext = "vessels." + app.selfId
 
   var unsubscribes = []
-  var blacklist
-  var whitelist
-  var listType
+  var shouldStore = function(path) { return true; }
 
   function handleDelta(delta) {
     if(delta.updates && delta.context === selfContext) {
@@ -33,15 +31,7 @@ module.exports = function(app) {
         if(update.values) {
           var points = update.values.reduce((acc, pathValue) => {
             if(typeof pathValue.value === 'number') {
-              var storeIt
-
-              if ( listType == 'White' ) {
-                storeIt = typeof whitelist[pathValue.path] != 'undefined'
-              } else if ( listType == 'Black' ) {
-                storeIt = typeof blacklist[pathValue.path] == 'undefined'
-              }  else {
-                storeIt = true
-              }
+              var storeIt = shouldStore(pathValue.path)
                 
               if ( storeIt ) {
                 acc.push({
@@ -124,17 +114,19 @@ module.exports = function(app) {
       {
         var obj = {}
 
-        for ( i = 0; i< options.blackOrWhitelist.length; i++ ) {
-          obj[options.blackOrWhitelist[i]] = true
-        }
+        options.blackOrWhitelist.forEach(element => {
+          obj[element] = true
+        })
 
-        listType = options.blackOrWhite
         if ( options.blackOrWhite == 'White' ) {
-          whitelist = obj
+          shouldStore = function(path) {
+            return typeof obj[path] != 'undefined'
+          }
         } else {
-          blacklist = obj
+          shouldStore = function(path) {
+            return typeof obj[path] == 'undefined'
+          }
         }
-
       }
 
       app.signalk.on('delta', handleDelta)
