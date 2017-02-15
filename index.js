@@ -15,12 +15,15 @@
 
 const Influx = require('influx')
 const Bacon = require('baconjs')
+const debug = require('debug')('signalk-to-influxdb')
+const util = require('util')
 
 module.exports = function(app) {
   var client;
   var selfContext = "vessels." + app.selfId
 
   var unsubscribes = []
+  var shouldStore = function(path) { return true; }
 
   function handleDelta(delta) {
     if(delta.updates && delta.context === selfContext) {
@@ -28,12 +31,16 @@ module.exports = function(app) {
         if(update.values) {
           var points = update.values.reduce((acc, pathValue) => {
             if(typeof pathValue.value === 'number') {
-              acc.push({
-                measurement: pathValue.path,
-                fields: {
-                  value: pathValue.value
-                }
-              })
+              var storeIt = shouldStore(pathValue.path)
+                
+              if ( storeIt ) {
+                acc.push({
+                  measurement: pathValue.path,
+                  fields: {
+                    value: pathValue.value
+                  }
+                })
+              }
             }
             return acc
           }, [])
@@ -74,7 +81,23 @@ module.exports = function(app) {
         database: {
           type: "string",
           title: "Database"
-        }
+        },
+        blackOrWhite: {
+          "type": "string",
+          "title": "Type of List",
+          "description": "With a blacklist, all numeric values except the ones in the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be stored.",
+          "default": "Black",
+          "enum": ["White", "Black"]
+        },        
+        blackOrWhitelist: {
+          title: "SignalK Paths",
+          description: "A list of SignalK paths to be exluded or included based on selection above",
+          type: "array",
+          "items": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
       }
     },
 
@@ -85,6 +108,26 @@ module.exports = function(app) {
         protocol: 'http', // optional, default 'http'
         database: options.database
       })
+
+      if ( typeof options.blackOrWhite != 'undefined'
+           && options.blackOrWhitelist.length > 0)
+      {
+        var obj = {}
+
+        options.blackOrWhitelist.forEach(element => {
+          obj[element] = true
+        })
+
+        if ( options.blackOrWhite == 'White' ) {
+          shouldStore = function(path) {
+            return typeof obj[path] != 'undefined'
+          }
+        } else {
+          shouldStore = function(path) {
+            return typeof obj[path] == 'undefined'
+          }
+        }
+      }
 
       app.signalk.on('delta', handleDelta)
 
