@@ -136,14 +136,14 @@ module.exports = function(app) {
             const awa = awaDeg / 180 * Math.PI
             return [
               {
-                measurement: 'environmentWindDirectionTrue',
+                measurement: 'environment.wind.angleTrueGround',
                 fields: {
-                  value: getTrueWindAngle(sog, aws, awa) + cog
+                  value: getGroundWindAngle(sog, aws, awa) + cog
                 }
             }, {
-                measurement: 'environmentWindSpeedTrue',
+                measurement: 'environment.wind.speedOverGround',
                 fields: {
-                  value: getTrueWindSpeed(sog, aws, awa)
+                  value: getGroundWindSpeed(sog, aws, awa)
                 }
             }
           ]
@@ -171,13 +171,13 @@ module.exports = function(app) {
   }
 }
 
-function getTrueWindAngle(speed, windSpeed, windAngle) {
+function getGroundWindAngle(speed, windSpeed, windAngle) {
   var apparentX = Math.cos(windAngle) * windSpeed;
   var apparentY = Math.sin(windAngle) * windSpeed;
   return Math.atan2(apparentY, -speed + apparentX);
 };
 
-function getTrueWindSpeed(speed, windSpeed, windAngle) {
+function getGroundWindSpeed(speed, windSpeed, windAngle) {
   var apparentX = Math.cos(windAngle) * windSpeed;
   var apparentY = Math.sin(windAngle) * windSpeed;
   return Math.sqrt(Math.pow(apparentY, 2) + Math.pow(-speed + apparentX, 2));
