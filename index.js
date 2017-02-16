@@ -109,8 +109,7 @@ module.exports = function(app) {
         database: options.database
       })
 
-      if ( typeof options.blackOrWhitelist != 'undefined'
-           && typeof options.blackOrWhite != 'undefined'
+      if ( typeof options.blackOrWhite != 'undefined'
            && options.blackOrWhitelist.length > 0)
       {
         var obj = {}
