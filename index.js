@@ -26,6 +26,11 @@ module.exports = function(app) {
   var shouldStore = function(path) { return true; }
 
   function handleDelta(delta) {
+
+    if (delta.context === "vessels.self") {
+      delta.context = selfContext
+    }
+
     if(delta.updates && delta.context === selfContext) {
       delta.updates.forEach(update => {
         if(update.values) {
@@ -103,8 +108,8 @@ module.exports = function(app) {
 
     start: function(options) {
       client = new Influx.InfluxDB({
-        host: 'localhost',
-        port: 8086, // optional, default 8086
+        host: options.host,
+        port: options.port, // optional, default 8086
         protocol: 'http', // optional, default 'http'
         database: options.database
       })
