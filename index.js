@@ -76,6 +76,47 @@ module.exports = function(app) {
     }
   }
 
+  app.get("/track", (req, res) => {
+    console.log(timewindowStart());
+    let query = `
+        select first(value) as "position"
+        from "navigation.position" 
+        where time >= ${Influx.escape.stringLit(timewindowStart())} group by time(1m)`;
+    client
+      .query(query)
+      .then(result => {
+        // res.json(result)
+        res.json(toMultilineString(result));
+      })
+      .catch(err => {
+        res.status(500).send(err.stack);
+      });
+  });
+
+  function toMultilineString(influxResult) {
+    let currentLine = [];
+    const result = {
+      type: "MultiLineString",
+      coordinates: []
+    };
+
+    influxResult.forEach(row => {
+      console.log(row.position)
+      if (row.position === null) {
+        currentLine = [];
+      } else {
+        currentLine[currentLine.length] = JSON.parse(row.position);
+        if (currentLine.length === 1) {
+          result.coordinates[result.coordinates.length] = currentLine;
+        }
+      }
+    });
+    return result;
+  }
+  function timewindowStart() {
+    return new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
+  }
+
   return {
     id: "signalk-to-influxdb",
     name: "InfluxDb writer",
