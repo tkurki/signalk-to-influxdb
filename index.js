@@ -36,14 +36,22 @@ module.exports = function(app) {
       delta.updates.forEach(update => {
         if (update.values) {
           var points = update.values.reduce((acc, pathValue) => {
-            if (typeof pathValue.value === "number") {
-              var storeIt = shouldStore(pathValue.path);
-
-              if (storeIt) {
+            if (shouldStore(pathValue.path)) {
+              if (typeof pathValue.value === "number") {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
                     value: pathValue.value
+                  }
+                });
+              } else if (pathValue.path === "navigation.position") {
+                acc.push({
+                  measurement: pathValue.path,
+                  fields: {
+                    value: JSON.stringify([
+                      pathValue.value.longitude,
+                      pathValue.value.latitude
+                    ])
                   }
                 });
               }
