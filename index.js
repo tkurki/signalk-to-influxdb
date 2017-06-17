@@ -19,11 +19,12 @@ const debug = require("debug")("signalk-to-influxdb");
 const util = require("util");
 
 module.exports = function(app) {
-  var client;
-  var selfContext = "vessels." + app.selfId;
+  let client;
+  let selfContext = "vessels." + app.selfId;
+  let lastPositionStored = 0;
 
-  var unsubscribes = [];
-  var shouldStore = function(path) {
+  let unsubscribes = [];
+  let shouldStore = function(path) {
     return true;
   };
 
@@ -44,7 +45,10 @@ module.exports = function(app) {
                     value: pathValue.value
                   }
                 });
-              } else if (pathValue.path === "navigation.position") {
+              } else if (
+                pathValue.path === "navigation.position" &&
+                new Date().getTime() - lastPositionStored > 1000
+              ) {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
@@ -54,6 +58,7 @@ module.exports = function(app) {
                     ])
                   }
                 });
+                lastPositionStored = new Date().getTime();
               }
             }
             return acc;
