@@ -113,6 +113,19 @@ module.exports = function(app) {
         database: options.database
       });
 
+      client
+        .getDatabaseNames()
+        .then(names => {
+          if (!names.includes(options.database)) {
+            client.createDatabase(options.database).then(result => {
+              console.log("Created InfluxDb database " + options.database);
+            });
+          }
+        })
+        .catch(err => {
+          console.error(err);
+        });
+
       if (
         typeof options.blackOrWhitelist != "undefined" &&
         typeof options.blackOrWhite != "undefined" &&
