@@ -91,7 +91,7 @@ module.exports = function(app) {
       if (row.position === null) {
         currentLine = [];
       } else {
-        currentLine[currentLine.length] = JSON.parse(row.position);
+        currentLine[currentLine.length] = JSON.parse(row.position);
         if (currentLine.length === 1) {
           result.coordinates[result.coordinates.length] = currentLine;
         }
@@ -252,7 +252,7 @@ module.exports = function(app) {
         client
           .query(query)
           .then(result => {
-            res.type("application/vnd.geo+json")
+            res.type("application/vnd.geo+json");
             res.json(toMultilineString(result));
           })
           .catch(err => {
