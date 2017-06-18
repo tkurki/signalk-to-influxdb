@@ -64,12 +64,16 @@ module.exports = function(app) {
             return acc;
           }, []);
           if (points.length > 0) {
-            client.writePoints(points, function(err, response) {
-              if (err) {
-                console.error(err.message);
-                console.error(response);
-              }
-            });
+            try {
+              client.writePoints(points, function(err, response) {
+                if (err) {
+                  console.error(err.message);
+                  console.error(response);
+                }
+              });
+            } catch (ex) {
+              console.error(ex.message);
+            }
           }
         }
       });
@@ -213,12 +217,16 @@ module.exports = function(app) {
           .changes()
           .debounceImmediate(200)
           .onValue(points => {
-            client.writePoints(points, function(err, response) {
-              if (err) {
-                console.error(err);
-                console.error(response);
-              }
-            });
+            try {
+              client.writePoints(points, function(err, response) {
+                if (err) {
+                  console.error(err);
+                  console.error(response);
+                }
+              });
+            } catch (ex) {
+              console.error(ex.message);
+            }
           })
       );
     },
