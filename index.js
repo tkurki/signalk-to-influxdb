@@ -236,6 +236,7 @@ module.exports = function(app) {
         client
           .query(query)
           .then(result => {
+            res.type("application/vnd.geo+json")
             res.json(toMultilineString(result));
           })
           .catch(err => {
