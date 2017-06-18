@@ -235,7 +235,15 @@ module.exports = function(app) {
       app.signalk.removeListener("delta", handleDelta);
     },
     signalKApiRoutes: function(router) {
-      const trackHandler = function(req, res) {
+      const trackHandler = function(req, res, next) {
+        if (typeof client === "undefined") {
+          console.error(
+            "signalk-to-influxdb plugin not enabled, http track interface not available"
+          );
+          next();
+          return;
+        }
+
         let query = `
         select first(value) as "position"
         from "navigation.position"
