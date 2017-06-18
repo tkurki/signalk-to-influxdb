@@ -76,23 +76,6 @@ module.exports = function(app) {
     }
   }
 
-  app.get("/track", (req, res) => {
-    console.log(timewindowStart());
-    let query = `
-        select first(value) as "position"
-        from "navigation.position" 
-        where time >= ${Influx.escape.stringLit(timewindowStart())} group by time(1m)`;
-    client
-      .query(query)
-      .then(result => {
-        // res.json(result)
-        res.json(toMultilineString(result));
-      })
-      .catch(err => {
-        res.status(500).send(err.stack);
-      });
-  });
-
   function toMultilineString(influxResult) {
     let currentLine = [];
     const result = {
@@ -242,9 +225,49 @@ module.exports = function(app) {
     stop: function() {
       unsubscribes.forEach(f => f());
       app.signalk.removeListener("delta", handleDelta);
+    },
+    signalKApiRoutes: function(router) {
+      const trackHandler = function(req, res) {
+        let query = `
+        select first(value) as "position"
+        from "navigation.position"
+        where time >= now() - ${sanitize(req.query.timespan || "1h")}
+        group by time(${sanitize(req.query.resolution || "1m")})`;
+        client
+          .query(query)
+          .then(result => {
+            res.json(toMultilineString(result));
+          })
+          .catch(err => {
+            console.error(err.message + " " + query);
+            res.status(500).send(err.message + " " + query);
+          });
+      };
+
+      router.get("/self/track", trackHandler);
+      router.get("/vessels/self/track", trackHandler);
+      router.get("/vessels/" + app.selfId + "/track", trackHandler);
+      return router;
     }
   };
 };
+
+const influxDurationKeys = {
+  s: "s",
+  m: "m",
+  h: "h",
+  d: "d",
+  w: "w"
+};
+
+function sanitize(influxTime) {
+  return (
+    Number(influxTime.substring(0, influxTime.length - 1)) +
+    influxDurationKeys[
+      influxTime.substring(influxTime.length - 1, influxTime.length)
+    ]
+  );
+}
 
 function getTrueWindAngle(speed, windSpeed, windAngle) {
   var apparentX = Math.cos(windAngle) * windSpeed;
