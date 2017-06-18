@@ -66,7 +66,7 @@ module.exports = function(app) {
           if (points.length > 0) {
             client.writePoints(points, function(err, response) {
               if (err) {
-                console.error(err);
+                console.error(err.message);
                 console.error(response);
               }
             });
@@ -101,7 +101,6 @@ module.exports = function(app) {
     };
 
     influxResult.forEach(row => {
-      console.log(row.position)
       if (row.position === null) {
         currentLine = [];
       } else {
