@@ -19,11 +19,12 @@ const debug = require("debug")("signalk-to-influxdb");
 const util = require("util");
 
 module.exports = function(app) {
-  var client;
-  var selfContext = "vessels." + app.selfId;
+  let client;
+  let selfContext = "vessels." + app.selfId;
+  let lastPositionStored = 0;
 
-  var unsubscribes = [];
-  var shouldStore = function(path) {
+  let unsubscribes = [];
+  let shouldStore = function(path) {
     return true;
   };
 
@@ -36,31 +37,70 @@ module.exports = function(app) {
       delta.updates.forEach(update => {
         if (update.values) {
           var points = update.values.reduce((acc, pathValue) => {
-            if (typeof pathValue.value === "number") {
-              var storeIt = shouldStore(pathValue.path);
-
-              if (storeIt) {
+            if (shouldStore(pathValue.path)) {
+              if (typeof pathValue.value === "number") {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
                     value: pathValue.value
                   }
                 });
+              } else if (
+                pathValue.path === "navigation.position" &&
+                new Date().getTime() - lastPositionStored > 1000
+              ) {
+                acc.push({
+                  measurement: pathValue.path,
+                  fields: {
+                    value: JSON.stringify([
+                      pathValue.value.longitude,
+                      pathValue.value.latitude
+                    ])
+                  }
+                });
+                lastPositionStored = new Date().getTime();
               }
             }
             return acc;
           }, []);
           if (points.length > 0) {
-            client.writePoints(points, function(err, response) {
-              if (err) {
-                console.error(err);
-                console.error(response);
-              }
-            });
+            try {
+              client.writePoints(points, function(err, response) {
+                if (err) {
+                  console.error(err.message);
+                  console.error(response);
+                }
+              });
+            } catch (ex) {
+              console.error(ex.message);
+            }
           }
         }
       });
     }
+  }
+
+  function toMultilineString(influxResult) {
+    let currentLine = [];
+    const result = {
+      type: "MultiLineString",
+      coordinates: []
+    };
+
+    influxResult.forEach(row => {
+      if (row.position === null) {
+        currentLine = [];
+      } else {
+        currentLine[currentLine.length] = JSON.parse(row.position);
+        if (currentLine.length === 1) {
+          result.coordinates[result.coordinates.length] = currentLine;
+        }
+      }
+    });
+    return result;
+  }
+  function timewindowStart() {
+    return new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
   }
 
   return {
@@ -177,21 +217,74 @@ module.exports = function(app) {
           .changes()
           .debounceImmediate(200)
           .onValue(points => {
-            client.writePoints(points, function(err, response) {
-              if (err) {
-                console.error(err);
-                console.error(response);
-              }
-            });
+            try {
+              client.writePoints(points, function(err, response) {
+                if (err) {
+                  console.error(err);
+                  console.error(response);
+                }
+              });
+            } catch (ex) {
+              console.error(ex.message);
+            }
           })
       );
     },
     stop: function() {
       unsubscribes.forEach(f => f());
       app.signalk.removeListener("delta", handleDelta);
+    },
+    signalKApiRoutes: function(router) {
+      const trackHandler = function(req, res, next) {
+        if (typeof client === "undefined") {
+          console.error(
+            "signalk-to-influxdb plugin not enabled, http track interface not available"
+          );
+          next();
+          return;
+        }
+
+        let query = `
+        select first(value) as "position"
+        from "navigation.position"
+        where time >= now() - ${sanitize(req.query.timespan || "1h")}
+        group by time(${sanitize(req.query.resolution || "1m")})`;
+        client
+          .query(query)
+          .then(result => {
+            res.type("application/vnd.geo+json");
+            res.json(toMultilineString(result));
+          })
+          .catch(err => {
+            console.error(err.message + " " + query);
+            res.status(500).send(err.message + " " + query);
+          });
+      };
+
+      router.get("/self/track", trackHandler);
+      router.get("/vessels/self/track", trackHandler);
+      router.get("/vessels/" + app.selfId + "/track", trackHandler);
+      return router;
     }
   };
 };
+
+const influxDurationKeys = {
+  s: "s",
+  m: "m",
+  h: "h",
+  d: "d",
+  w: "w"
+};
+
+function sanitize(influxTime) {
+  return (
+    Number(influxTime.substring(0, influxTime.length - 1)) +
+    influxDurationKeys[
+      influxTime.substring(influxTime.length - 1, influxTime.length)
+    ]
+  );
+}
 
 function getTrueWindAngle(speed, windSpeed, windAngle) {
   var apparentX = Math.cos(windAngle) * windSpeed;
