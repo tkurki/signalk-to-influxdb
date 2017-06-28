@@ -1,15 +1,12 @@
 {
   "name": "signalk-to-influxdb",
-  "version": "0.0.1",
-  "description": "Signal K server plugin to send all simple valuess to InfluxDb",
+  "version": "1.0.0",
+  "description": "Signal K server plugin to send all numeric values & positions to InfluxDb",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "keywords": [
     "signalk-node-server-plugin"
   ],
-  "author": "teppo.kurki@iki,fi",
+  "author": "Teppo Kurki <teppo.kurki@iki,fi>",
   "license": "ISC",
   "dependencies": {
     "baconjs": "^0.7.88",

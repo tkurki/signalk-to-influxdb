@@ -13,48 +13,94 @@
  * limitations under the License.
  */
 
-const Influx = require('influx')
-const Bacon = require('baconjs')
-const debug = require('debug')('signalk-to-influxdb')
-const util = require('util')
+const Influx = require("influx");
+const Bacon = require("baconjs");
+const debug = require("debug")("signalk-to-influxdb");
+const util = require("util");
 
 module.exports = function(app) {
-  var client;
-  var selfContext = "vessels." + app.selfId
+  let client;
+  let selfContext = "vessels." + app.selfId;
+  let lastPositionStored = 0;
 
-  var unsubscribes = []
-  var shouldStore = function(path) { return true; }
+  let unsubscribes = [];
+  let shouldStore = function(path) {
+    return true;
+  };
 
   function handleDelta(delta) {
-    if(delta.updates && delta.context === selfContext) {
+    if (delta.context === "vessels.self") {
+      delta.context = selfContext;
+    }
+
+    if (delta.updates && delta.context === selfContext) {
       delta.updates.forEach(update => {
-        if(update.values) {
+        if (update.values) {
           var points = update.values.reduce((acc, pathValue) => {
-            if(typeof pathValue.value === 'number') {
-              var storeIt = shouldStore(pathValue.path)
-                
-              if ( storeIt ) {
+            if (shouldStore(pathValue.path)) {
+              if (typeof pathValue.value === "number") {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
                     value: pathValue.value
                   }
-                })
+                });
+              } else if (
+                pathValue.path === "navigation.position" &&
+                new Date().getTime() - lastPositionStored > 1000
+              ) {
+                acc.push({
+                  measurement: pathValue.path,
+                  fields: {
+                    value: JSON.stringify([
+                      pathValue.value.longitude,
+                      pathValue.value.latitude
+                    ])
+                  }
+                });
+                lastPositionStored = new Date().getTime();
               }
             }
-            return acc
-          }, [])
-          if(points.length > 0) {
-            client.writePoints(points, function(err, response) {
-              if(err) {
-                console.error(err)
-                console.error(response)
-              }
-            })
+            return acc;
+          }, []);
+          if (points.length > 0) {
+            try {
+              client.writePoints(points, function(err, response) {
+                if (err) {
+                  console.error(err.message);
+                  console.error(response);
+                }
+              });
+            } catch (ex) {
+              console.error(ex.message);
+            }
           }
         }
-      })
+      });
     }
+  }
+
+  function toMultilineString(influxResult) {
+    let currentLine = [];
+    const result = {
+      type: "MultiLineString",
+      coordinates: []
+    };
+
+    influxResult.forEach(row => {
+      if (row.position === null) {
+        currentLine = [];
+      } else {
+        currentLine[currentLine.length] = JSON.parse(row.position);
+        if (currentLine.length === 1) {
+          result.coordinates[result.coordinates.length] = currentLine;
+        }
+      }
+    });
+    return result;
+  }
+  function timewindowStart() {
+    return new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
   }
 
   return {
@@ -64,9 +110,7 @@ module.exports = function(app) {
 
     schema: {
       type: "object",
-      required: [
-        "host", "port", "database"
-      ],
+      required: ["host", "port", "database"],
       properties: {
         host: {
           type: "string",
@@ -83,103 +127,173 @@ module.exports = function(app) {
           title: "Database"
         },
         blackOrWhite: {
-          "type": "string",
-          "title": "Type of List",
-          "description": "With a blacklist, all numeric values except the ones in the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be stored.",
-          "default": "Black",
-          "enum": ["White", "Black"]
-        },        
+          type: "string",
+          title: "Type of List",
+          description: "With a blacklist, all numeric values except the ones in the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be stored.",
+          default: "Black",
+          enum: ["White", "Black"]
+        },
         blackOrWhitelist: {
           title: "SignalK Paths",
           description: "A list of SignalK paths to be exluded or included based on selection above",
           type: "array",
-          "items": {
-            "type": "string",
-            "title": "Path"
+          items: {
+            type: "string",
+            title: "Path"
           }
-        },
+        }
       }
     },
 
     start: function(options) {
       client = new Influx.InfluxDB({
-        host: 'localhost',
-        port: 8086, // optional, default 8086
-        protocol: 'http', // optional, default 'http'
+        host: options.host,
+        port: options.port, // optional, default 8086
+        protocol: "http", // optional, default 'http'
         database: options.database
-      })
+      });
 
-      if ( typeof options.blackOrWhitelist != 'undefined'
-           && typeof options.blackOrWhite != 'undefined'
-           && options.blackOrWhitelist.length > 0)            
-      {
-        var obj = {}
+      client
+        .getDatabaseNames()
+        .then(names => {
+          if (!names.includes(options.database)) {
+            client.createDatabase(options.database).then(result => {
+              console.log("Created InfluxDb database " + options.database);
+            });
+          }
+        })
+        .catch(err => {
+          console.error(err);
+        });
+
+      if (
+        typeof options.blackOrWhitelist != "undefined" &&
+        typeof options.blackOrWhite != "undefined" &&
+        options.blackOrWhitelist.length > 0
+      ) {
+        var obj = {};
 
         options.blackOrWhitelist.forEach(element => {
-          obj[element] = true
-        })
+          obj[element] = true;
+        });
 
-        if ( options.blackOrWhite == 'White' ) {
+        if (options.blackOrWhite == "White") {
           shouldStore = function(path) {
-            return typeof obj[path] != 'undefined'
-          }
+            return typeof obj[path] != "undefined";
+          };
         } else {
           shouldStore = function(path) {
-            return typeof obj[path] == 'undefined'
-          }
+            return typeof obj[path] == "undefined";
+          };
         }
       }
 
-      app.signalk.on('delta', handleDelta)
+      app.signalk.on("delta", handleDelta);
 
-      unsubscribes.push(Bacon.combineWith(function(awaDeg, aws, sog, cogDeg) {
-            const cog = cogDeg / 180 * Math.PI
-            const awa = awaDeg / 180 * Math.PI
-            return [
-              {
-                measurement: 'environmentWindDirectionTrue',
-                fields: {
-                  value: getTrueWindAngle(sog, aws, awa) + cog
-                }
-            }, {
-                measurement: 'environmentWindSpeedTrue',
-                fields: {
-                  value: getTrueWindSpeed(sog, aws, awa)
-                }
+      unsubscribes.push(
+        Bacon.combineWith(function(awaDeg, aws, sog, cogDeg) {
+          const cog = cogDeg / 180 * Math.PI;
+          const awa = awaDeg / 180 * Math.PI;
+          return [
+            {
+              measurement: "environmentWindDirectionTrue",
+              fields: {
+                value: getTrueWindAngle(sog, aws, awa) + cog
+              }
+            },
+            {
+              measurement: "environmentWindSpeedTrue",
+              fields: {
+                value: getTrueWindSpeed(sog, aws, awa)
+              }
             }
-          ]
-          }, [
-        'environment.wind.angleApparent',
-        'environment.wind.speedApparent',
-        'navigation.speedOverGround',
-        'navigation.courseOverGroundTrue']
-          .map(app.streambundle.getSelfStream, app.streambundle))
-        .changes()
-        .debounceImmediate(200)
-        .onValue(points => {
-          client.writePoints(points, function(err, response) {
-            if(err) {
-              console.error(err)
-              console.error(response)
+          ];
+        }, [
+          "environment.wind.angleApparent",
+          "environment.wind.speedApparent",
+          "navigation.speedOverGround",
+          "navigation.courseOverGroundTrue"
+        ].map(app.streambundle.getSelfStream, app.streambundle))
+          .changes()
+          .debounceImmediate(200)
+          .onValue(points => {
+            try {
+              client.writePoints(points, function(err, response) {
+                if (err) {
+                  console.error(err);
+                  console.error(response);
+                }
+              });
+            } catch (ex) {
+              console.error(ex.message);
             }
           })
-        }))
+      );
     },
     stop: function() {
-      unsubscribes.forEach(f => f())
-      app.signalk.removeListener('delta', handleDelta)
+      unsubscribes.forEach(f => f());
+      app.signalk.removeListener("delta", handleDelta);
+    },
+    signalKApiRoutes: function(router) {
+      const trackHandler = function(req, res, next) {
+        if (typeof client === "undefined") {
+          console.error(
+            "signalk-to-influxdb plugin not enabled, http track interface not available"
+          );
+          next();
+          return;
+        }
+
+        let query = `
+        select first(value) as "position"
+        from "navigation.position"
+        where time >= now() - ${sanitize(req.query.timespan || "1h")}
+        group by time(${sanitize(req.query.resolution || "1m")})`;
+        client
+          .query(query)
+          .then(result => {
+            res.type("application/vnd.geo+json");
+            res.json(toMultilineString(result));
+          })
+          .catch(err => {
+            console.error(err.message + " " + query);
+            res.status(500).send(err.message + " " + query);
+          });
+      };
+
+      router.get("/self/track", trackHandler);
+      router.get("/vessels/self/track", trackHandler);
+      router.get("/vessels/" + app.selfId + "/track", trackHandler);
+      return router;
     }
-  }
+  };
+};
+
+const influxDurationKeys = {
+  s: "s",
+  m: "m",
+  h: "h",
+  d: "d",
+  w: "w"
+};
+
+function sanitize(influxTime) {
+  return (
+    Number(influxTime.substring(0, influxTime.length - 1)) +
+    influxDurationKeys[
+      influxTime.substring(influxTime.length - 1, influxTime.length)
+    ]
+  );
 }
 
 function getTrueWindAngle(speed, windSpeed, windAngle) {
   var apparentX = Math.cos(windAngle) * windSpeed;
   var apparentY = Math.sin(windAngle) * windSpeed;
   return Math.atan2(apparentY, -speed + apparentX);
-};
+}
 
 function getTrueWindSpeed(speed, windSpeed, windAngle) {
   var apparentX = Math.cos(windAngle) * windSpeed;
   var apparentY = Math.sin(windAngle) * windSpeed;
   return Math.sqrt(Math.pow(apparentY, 2) + Math.pow(-speed + apparentX, 2));
-};
+}
