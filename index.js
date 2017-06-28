@@ -24,10 +24,8 @@ module.exports = function(app) {
   let lastPositionStored = 0;
 
   let unsubscribes = [];
-  let shouldStore = function(path) {
-    return true;
-  };
-
+  var shouldStore;
+  
   function handleDelta(delta) {
     if (delta.context === "vessels.self") {
       delta.context = selfContext;
@@ -126,6 +124,11 @@ module.exports = function(app) {
           type: "string",
           title: "Database"
         },
+        recordtrack: {
+          type: "boolean",
+          title: "Record Track",
+          default: false
+        },
         blackOrWhite: {
           type: "string",
           title: "Type of List",
@@ -186,10 +189,18 @@ module.exports = function(app) {
             return typeof obj[path] == "undefined";
           };
         }
+      } else {
+        shouldStore = function(path) {
+          if ( path === 'navigation.position' ) {
+            return options.recordtrack;
+          } else {
+            return true;
+          }
+        };
       }
 
       app.signalk.on("delta", handleDelta);
-
+      
       unsubscribes.push(
         Bacon.combineWith(function(awaDeg, aws, sog, cogDeg) {
           const cog = cogDeg / 180 * Math.PI;
