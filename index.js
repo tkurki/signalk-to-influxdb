@@ -126,6 +126,11 @@ module.exports = function(app) {
           type: "string",
           title: "Database"
         },
+        resolution: {
+          type: "number",
+          title: "Resolution (ms)",
+          default: 200
+        },
         blackOrWhite: {
           type: "string",
           title: "Type of List",
@@ -215,7 +220,7 @@ module.exports = function(app) {
           "navigation.courseOverGroundTrue"
         ].map(app.streambundle.getSelfStream, app.streambundle))
           .changes()
-          .debounceImmediate(200)
+          .debounceImmediate(options.resolution)
           .onValue(points => {
             try {
               client.writePoints(points, function(err, response) {
