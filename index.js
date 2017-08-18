@@ -220,7 +220,7 @@ module.exports = function(app) {
           "navigation.courseOverGroundTrue"
         ].map(app.streambundle.getSelfStream, app.streambundle))
           .changes()
-          .debounceImmediate(options.resolution)
+          .debounceImmediate(options.resolution || 200)
           .onValue(points => {
             try {
               client.writePoints(points, function(err, response) {
