@@ -17,6 +17,7 @@ const Influx = require('influx')
 const Bacon = require('baconjs')
 const debug = require('debug')('signalk-to-influxdb')
 const util = require('util')
+const { createTrackRouter } = require('./tracks')
 
 module.exports = function (app) {
   let client
@@ -82,25 +83,6 @@ module.exports = function (app) {
     }
   }
 
-  function toMultilineString (influxResult) {
-    let currentLine = []
-    const result = {
-      type: 'MultiLineString',
-      coordinates: []
-    }
-
-    influxResult.forEach(row => {
-      if (row.position === null) {
-        currentLine = []
-      } else {
-        currentLine[currentLine.length] = JSON.parse(row.position)
-        if (currentLine.length === 1) {
-          result.coordinates[result.coordinates.length] = currentLine
-        }
-      }
-    })
-    return result
-  }
   function timewindowStart () {
     return new Date(new Date().getTime() - 60 * 60 * 1000).toISOString()
   }
@@ -251,56 +233,8 @@ module.exports = function (app) {
       unsubscribes.forEach(f => f())
       app.signalk.removeListener('delta', handleDelta)
     },
-    signalKApiRoutes: function (router) {
-      const trackHandler = function (req, res, next) {
-        if (typeof client === 'undefined') {
-          console.error(
-            'signalk-to-influxdb plugin not enabled, http track interface not available'
-          )
-          next()
-          return
-        }
-
-        let query = `
-        select first(value) as "position"
-        from "navigation.position"
-        where time >= now() - ${sanitize(req.query.timespan || '1h')}
-        group by time(${sanitize(req.query.resolution || '1m')})`
-        client
-          .query(query)
-          .then(result => {
-            res.type('application/vnd.geo+json')
-            res.json(toMultilineString(result))
-          })
-          .catch(err => {
-            console.error(err.message + ' ' + query)
-            res.status(500).send(err.message + ' ' + query)
-          })
-      }
-
-      router.get('/self/track', trackHandler)
-      router.get('/vessels/self/track', trackHandler)
-      router.get('/vessels/' + app.selfId + '/track', trackHandler)
-      return router
-    }
+    signalKApiRoutes: createTrackRouter(_ => client)
   }
-}
-
-const influxDurationKeys = {
-  s: 's',
-  m: 'm',
-  h: 'h',
-  d: 'd',
-  w: 'w'
-}
-
-function sanitize (influxTime) {
-  return (
-    Number(influxTime.substring(0, influxTime.length - 1)) +
-    influxDurationKeys[
-      influxTime.substring(influxTime.length - 1, influxTime.length)
-    ]
-  )
 }
 
 function getTrueWindAngle (speed, windSpeed, windAngle) {
