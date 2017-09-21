@@ -43,6 +43,7 @@ module.exports = function (app) {
               if (new Date().getTime() - lastPositionStored > 1000) {
                 acc.push({
                   measurement: pathValue.path,
+                  timestamp: new Date(update.timestamp),
                   fields: {
                     value: JSON.stringify([
                       pathValue.value.longitude,
@@ -57,6 +58,7 @@ module.exports = function (app) {
                 !isNaN(pathValue.value)) {
                 acc.push({
                   measurement: pathValue.path,
+                  timestamp: new Date(update.timestamp),
                   fields: {
                     value: pathValue.value
                   }
@@ -189,20 +191,20 @@ module.exports = function (app) {
       app.signalk.on('delta', handleDelta)
 
       unsubscribes.push(
-        Bacon.combineWith(function (awaDeg, aws, sog, cogDeg) {
-          const cog = cogDeg / 180 * Math.PI
-          const awa = awaDeg / 180 * Math.PI
+        Bacon.combineWith(function (awa, aws, sog, cog) {
           return [
             {
               measurement: 'environmentWindDirectionTrue',
+              timestamp: new Date(awa.timestamp),
               fields: {
-                value: getTrueWindAngle(sog, aws, awa) + cog
+                value: getTrueWindAngle(sog.value, aws.value, awa.value) + cog.value
               }
             },
             {
               measurement: 'environmentWindSpeedTrue',
+              timestamp: new Date(aws.timestamp),
               fields: {
-                value: getTrueWindSpeed(sog, aws, awa)
+                value: getTrueWindSpeed(sog.value, aws.value, awa.value)
               }
             }
           ]
@@ -211,7 +213,7 @@ module.exports = function (app) {
           'environment.wind.speedApparent',
           'navigation.speedOverGround',
           'navigation.courseOverGroundTrue'
-        ].map(app.streambundle.getSelfStream, app.streambundle))
+        ].map(app.streambundle.getSelfBus, app.streambundle))
           .changes()
           .debounceImmediate(options.resolution || 200)
           .onValue(points => {
