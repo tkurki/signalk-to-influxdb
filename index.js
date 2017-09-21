@@ -39,10 +39,8 @@ module.exports = function (app) {
       delta.updates.forEach(update => {
         if (update.values) {
           var points = update.values.reduce((acc, pathValue) => {
-            if ( pathValue.path === 'navigation.position' ) {
-              if ( recordTrack &&
-                   new Date().getTime() - lastPositionStored > 1000
-                 ) {
+            if (recordTrack && pathValue.path === 'navigation.position') {
+              if (new Date().getTime() - lastPositionStored > 1000) {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
@@ -55,7 +53,8 @@ module.exports = function (app) {
                 lastPositionStored = new Date().getTime()
               }
             } else if (shouldStore(pathValue.path)) {
-              if (typeof pathValue.value === 'number') {
+              if (typeof pathValue.value === 'number' &&
+                !isNaN(pathValue.value)) {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
