@@ -14,7 +14,10 @@
   "dependencies": {
     "baconjs": "^0.7.88",
     "debug": "^2.2.0",
-    "influx": "^5.0.0"
+    "geolib": "^2.0.23",
+    "influx": "^5.0.0",
+    "ngeohash": "^0.6.0",
+    "sqlite": "^2.8.0"
   },
   "devDependencies": {
     "prettier-standard": "^6.0.0"

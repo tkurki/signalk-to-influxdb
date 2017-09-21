@@ -17,13 +17,15 @@ const Influx = require('influx')
 const Bacon = require('baconjs')
 const debug = require('debug')('signalk-to-influxdb')
 const util = require('util')
-const { createTrackRouter } = require('./tracks')
+const { createTrackRouter } = require('./trackrouter')
+const { createTrackDb } = require('./trackdb')
 
 module.exports = function (app) {
   let client
   let selfContext = 'vessels.' + app.selfId
   let lastPositionStored = 0
   let recordTrack = false
+  let trackDb = createTrackDb(app)
 
   let unsubscribes = []
   let shouldStore = function (path) {
@@ -144,6 +146,8 @@ module.exports = function (app) {
     },
 
     start: function (options) {
+      trackDb.start()
+
       client = new Influx.InfluxDB({
         host: options.host,
         port: options.port, // optional, default 8086
@@ -233,8 +237,9 @@ module.exports = function (app) {
     stop: function () {
       unsubscribes.forEach(f => f())
       app.signalk.removeListener('delta', handleDelta)
+      trackDb.stop()
     },
-    signalKApiRoutes: createTrackRouter(_ => client)
+    signalKApiRoutes: createTrackRouter(_ => client, trackDb.getPeriods)
   }
 }
 
