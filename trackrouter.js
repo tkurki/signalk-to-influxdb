@@ -50,7 +50,6 @@ function createTrackRouter (getClient, getPeriods) {
         getClient()
           .query(queries)
           .then(result => {
-            console.log(result)
             res.type('application/vnd.geo+json')
             res.json(
               toFeatureCollection(queries.length === 1 ? [result] : result)
