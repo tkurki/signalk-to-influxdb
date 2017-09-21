@@ -63,10 +63,10 @@ function createTrackDb (app) {
               .onValue(value => {
                 let current = Date.parse(value.timestamp)
                 if (current - lastWrite > minInterval) {
-                  let trackIdP = !trackId ||
-                    current - lastWrite > trackCutoffInterval
-                    ? newTrackId(trackDb, value.timestamp)
-                    : Promise.resolve(trackId)
+                  let trackIdP =
+                    !trackId || current - lastWrite > trackCutoffInterval
+                      ? newTrackId(trackDb, value.timestamp)
+                      : Promise.resolve(trackId)
 
                   lastWrite = current
 

@@ -201,7 +201,8 @@ module.exports = function (app) {
               measurement: 'environmentWindDirectionTrue',
               timestamp: new Date(awa.timestamp),
               fields: {
-                value: getTrueWindAngle(sog.value, aws.value, awa.value) + cog.value
+                value:
+                  getTrueWindAngle(sog.value, aws.value, awa.value) + cog.value
               }
             },
             {

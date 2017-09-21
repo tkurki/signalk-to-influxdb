@@ -27,7 +27,8 @@ function createTrackRouter (getClient, getPeriods) {
       ) {
         res.status(404)
         res.json({
-          error: 'signalk-to-influxdb plugin not enabled, http track interface not available'
+          error:
+            'signalk-to-influxdb plugin not enabled, http track interface not available'
         })
         return
       }
@@ -51,7 +52,9 @@ function createTrackRouter (getClient, getPeriods) {
           .then(result => {
             console.log(result)
             res.type('application/vnd.geo+json')
-            res.json(toFeatureCollection(queries.length === 1 ? [result] : result))
+            res.json(
+              toFeatureCollection(queries.length === 1 ? [result] : result)
+            )
           })
           .catch(err => {
             console.error(err.message + ' ' + queries)
