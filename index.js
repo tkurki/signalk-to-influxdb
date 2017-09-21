@@ -226,7 +226,6 @@ module.exports = function (app) {
               client.writePoints(points, function (err, response) {
                 if (err) {
                   console.error(err)
-                  console.error(response)
                 }
               })
             } catch (ex) {
