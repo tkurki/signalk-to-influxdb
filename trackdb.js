@@ -60,13 +60,14 @@ function createTrackDb (app) {
           unsubscribes.push(
             app.streambundle
               .getSelfBus('navigation.position')
+              .filter(() => trackDb)
               .onValue(value => {
                 let current = Date.parse(value.timestamp)
                 if (current - lastWrite > minInterval) {
-                  let trackIdP =
-                    !trackId || current - lastWrite > trackCutoffInterval
-                      ? newTrackId(trackDb, value.timestamp)
-                      : Promise.resolve(trackId)
+                  let trackIdP = !trackId ||
+                    current - lastWrite > trackCutoffInterval
+                    ? newTrackId(trackDb, value.timestamp)
+                    : Promise.resolve(trackId)
 
                   lastWrite = current
 
@@ -88,6 +89,7 @@ function createTrackDb (app) {
                       }
                       )
                       .then(stmt => stmt.run())
+                      .then(stmt => stmt.finalize())
                       .catch(error => {
                         console.error(error)
                       })
@@ -101,10 +103,13 @@ function createTrackDb (app) {
         })
     },
     stop: function () {
+      unsubscribes.forEach(f => f())
+      unsubscribes = []
       if (trackDb) {
-        trackDb.close().then(_ => {
+        const theDb = trackDb
+        trackDb = undefined
+        theDb.close().then(_ => {
           debug('track db closed')
-          track = undefined
         })
       }
     },
