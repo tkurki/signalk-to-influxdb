@@ -27,23 +27,39 @@ function createTrackRouter (getClient, getPeriods) {
       ) {
         res.status(404)
         res.json({
-          error:
-            'signalk-to-influxdb plugin not enabled, http track interface not available'
+          error: 'signalk-to-influxdb plugin not enabled, http track interface not available'
         })
         return
       }
 
       getPeriods(req.query.bbox).then(periods => {
+        let dataPaths = []
         const queries = periods
-          .map(
-            period =>
+          .reduce((acc, period) => {
+            acc.push(
               `
-        select first(value) as "position"
-        from "navigation.position"
-        where
-          time >= '${period.start}' AND time <= '${period.end}'
-        group by time(${bboxToInfluxTimeResolution(req.query.bbox)})`
-          )
+              select first(value) as "position"
+              from "navigation.position"
+              where
+                time >= '${period.start}' AND time <= '${period.end}'
+              group by time(${bboxToInfluxTimeResolution(req.query.bbox)})`
+            )
+
+            if (req.query.paths) {
+              dataPaths = req.query.paths.split(',')
+              dataPaths.forEach(dataPath => {
+                acc.push(
+                  `
+                  select min(value) as "value"
+                  from "${dataPath}"
+                  where
+                    time >= '${period.start}' AND time <= '${period.end}'
+                  group by time(${bboxToInfluxTimeResolution(req.query.bbox)})`
+                )
+              })
+            }
+            return acc
+          }, [])
           .map(query => query.replace(/\s\s+/g, ' '))
         debug(queries)
 
@@ -51,9 +67,17 @@ function createTrackRouter (getClient, getPeriods) {
           .query(queries)
           .then(result => {
             res.type('application/vnd.geo+json')
-            res.json(
-              toFeatureCollection(queries.length === 1 ? [result] : result)
-            )
+            try {
+              const featureCollection = toFeatureCollection(
+                queries.length === 1 ? [result] : result,
+                dataPaths
+              )
+              res.json(featureCollection)
+            } catch (ex) {
+              console.log(ex)
+              console.log(ex.stack)
+              throw ex
+            }
           })
           .catch(err => {
             console.error(err.message + ' ' + queries)
@@ -67,10 +91,20 @@ function createTrackRouter (getClient, getPeriods) {
   }
 }
 
-function toFeatureCollection (result) {
+function toFeatureCollection (results, dataPaths) {
   return {
     type: 'FeatureCollection',
-    features: result.map(toFeature)
+    properties: {
+      dataPaths: dataPaths
+    },
+    features: results.reduce((acc, result, index) => {
+      if (index % (dataPaths.length + 1) === 0) {
+        acc.push(toFeature(result))
+      } else {
+        pushRowValuesToCoordinates(acc[acc.length - 1], result)
+      }
+      return acc
+    }, [])
   }
 }
 
@@ -93,20 +127,31 @@ function toMultilineString (influxResult) {
   let currentLine = []
   const result = {
     type: 'MultiLineString',
-    coordinates: []
+    coordinates: [currentLine]
   }
 
   influxResult.forEach(row => {
-    if (row.position === null) {
-      currentLine = []
-    } else {
+    if (row.position) {
       currentLine.push(JSON.parse(row.position))
-      if (currentLine.length === 1) {
-        result.coordinates.push(currentLine)
-      }
+      currentLine[currentLine.length - 1][2] = 0
+      currentLine[currentLine.length - 1][3] = row.time.getTime()
     }
   })
   return result
+}
+
+function pushRowValuesToCoordinates (feature, influxResult) {
+  let i = 0
+  influxResult.forEach(row => {
+    const dataTime = row.time.getTime()
+    if (
+      feature.geometry.coordinates[0][i] &&
+      dataTime === feature.geometry.coordinates[0][i][3]
+    ) {
+      feature.geometry.coordinates[0][i].push(row.value)
+      i++
+    }
+  })
 }
 
 const influxDurationKeys = {
