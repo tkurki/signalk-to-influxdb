@@ -32,43 +32,43 @@ function createTrackRouter (getClient, getPeriods) {
         return
       }
 
-      getPeriods(req.query.bbox).then(periods => {
-        let dataPaths = []
-        const queries = periods
-          .reduce((acc, period) => {
-            acc.push(
-              `
+      getPeriods(req.query.bbox)
+        .then(periods => {
+          let dataPaths = []
+          const queries = periods
+            .reduce((acc, period) => {
+              acc.push(
+                `
               select first(value) as "position"
               from "navigation.position"
               where
                 time >= '${period.start}' AND time <= '${period.end}'
               group by time(${bboxToInfluxTimeResolution(req.query.bbox)})`
-            )
+              )
 
-            if (req.query.paths) {
-              dataPaths = req.query.paths.split(',')
-              dataPaths.forEach(dataPath => {
-                acc.push(
-                  `
+              if (req.query.paths) {
+                dataPaths = req.query.paths.split(',')
+                dataPaths.forEach(dataPath => {
+                  acc.push(
+                    `
                   select min(value) as "value"
                   from "${dataPath}"
                   where
                     time >= '${period.start}' AND time <= '${period.end}'
                   group by time(${bboxToInfluxTimeResolution(req.query.bbox)})`
-                )
-              })
-            }
-            return acc
-          }, [])
-          .map(query => query.replace(/\s\s+/g, ' '))
-        debug(queries)
+                  )
+                })
+              }
+              return acc
+            }, [])
+            .map(query => query.replace(/\s\s+/g, ' '))
+          debug(queries)
 
-        getClient()
-          .query(queries)
-          .then(result => {
+          return getClient().query(queries).then(result => {
             res.type('application/vnd.geo+json')
             try {
               const featureCollection = toFeatureCollection(
+                periods, 
                 queries.length === 1 ? [result] : result,
                 dataPaths
               )
@@ -79,11 +79,11 @@ function createTrackRouter (getClient, getPeriods) {
               throw ex
             }
           })
-          .catch(err => {
-            console.error(err.message + ' ' + queries)
-            res.status(500).send(err.message + ' ' + queries)
-          })
-      })
+        })
+        .catch(err => {
+          console.error(err.message + ' ' + req.query)
+          res.status(500).send(err.message + ' ' + req.query)
+        })
     }
 
     router.get('/vessels/self/tracks', trackHandler)
@@ -91,7 +91,9 @@ function createTrackRouter (getClient, getPeriods) {
   }
 }
 
-function toFeatureCollection (results, dataPaths) {
+function toFeatureCollection (tracks, results, dataPaths) {
+  //we get (datapaths.length + 1) x tracks.length results:
+  //one for each track's positions and one per datapath
   return {
     type: 'FeatureCollection',
     properties: {
@@ -99,7 +101,7 @@ function toFeatureCollection (results, dataPaths) {
     },
     features: results.reduce((acc, result, index) => {
       if (index % (dataPaths.length + 1) === 0) {
-        acc.push(toFeature(result))
+        acc.push(toFeature(tracks[index % (dataPaths.length + 1)], result))
       } else {
         pushRowValuesToCoordinates(acc[acc.length - 1], result)
       }
@@ -108,17 +110,20 @@ function toFeatureCollection (results, dataPaths) {
   }
 }
 
-function toFeature (influxResult) {
+function toFeature (track, influxResult) {
   const result = {
     type: 'Feature',
     properties: {
+      id: track.id,
+      startTime: track.start,
+      endTime: track.end,
       name: 'Track'
     },
     geometry: toMultilineString(influxResult)
   }
   if (influxResult.length) {
-    result.properties.starttime = influxResult[0].time
-    result.properties.endtime = influxResult[influxResult.length - 1].time
+    result.properties.clippedStartTime = influxResult[0].time
+    result.properties.clippedEndTime = influxResult[influxResult.length - 1].time
   }
   return result
 }

@@ -17,6 +17,8 @@ const Bacon = require('baconjs')
 const debug = require('debug')('signalk:signalk-to-influxdb')
 const db = require('sqlite')
 const geohash = require('ngeohash')
+const uuidv4 = require('uuid/v4')
+const groupBy = require('lodash.groupby')
 
 module.exports = { createTrackDb }
 
@@ -48,7 +50,8 @@ function createTrackDb (app) {
             `
             CREATE TABLE IF NOT EXISTS track(
               id INTEGER PRIMARY KEY,
-              name text
+              name text,
+              uuid text NOT NULL
             )`
           )
         })
@@ -121,17 +124,16 @@ function createTrackDb (app) {
 
 function getPeriods (trackDb, geohashes) {
   return getTrackData(trackDb, geohashes)
-    .then(splitToTrackSegments)
-    .then(trackSegments => {
-      return Promise.resolve(trackSegments.map(toPeriod))
-    })
-}
-
-function toPeriod (rows) {
-  return {
-    start: new Date(rows[0].timestamp).toISOString(),
-    end: new Date(rows[rows.length - 1].timestamp + 60 * 1000).toISOString()
-  }
+    .then(rows => groupBy(rows, row => row.uuid))
+    .then(trackSegmentsByUuid =>
+      Object.keys(trackSegmentsByUuid).map(trackUuid => ({
+        id: trackUuid,
+        start: new Date(trackSegmentsByUuid[trackUuid][0].timestamp).toISOString(),
+        end: new Date(
+          trackSegmentsByUuid[trackUuid].slice(-1)[0].timestamp + 60 * 1000
+        ).toISOString()
+      }))
+    )
 }
 
 // @bboxString southwest_lng,southwest_lat,northeast_lng,northeast_lat
@@ -147,36 +149,17 @@ function boundsToHashes (bboxString) {
   return result
 }
 
-function splitToTrackSegments (rows) {
-  try {
-    let lastMillis = 0
-    let currentTrackRows
-    const threshold = 5 * 60 * 1000
-    const result = rows.reduce((acc, row) => {
-      if (row.timestamp - lastMillis > threshold) {
-        if (typeof currentTrackRows !== 'undefined') {
-          acc.push(currentTrackRows)
-        }
-        currentTrackRows = []
-      }
-      lastMillis = row.timestamp
-      currentTrackRows.push(row)
-      return acc
-    }, [])
-    if (typeof currentTrackRows !== 'undefined') {
-      result.push(currentTrackRows)
-    }
-    return Promise.resolve(result)
-  } catch (err) {
-    console.error(err)
-  }
-}
-
 function getTrackData (getTrackDb, hashes) {
   const trackDb = getTrackDb()
   if (trackDb) {
     const query = `
-        SELECT * from trackdata
+        SELECT
+        trackdata.timestamp, track.uuid
+        FROM
+        trackdata
+        INNER JOIN
+        track
+        ON trackdata.track = track.id
         where ${hashesToWhereClause(hashes)}
         ORDER BY timestamp
       `
@@ -193,7 +176,7 @@ function hashesToWhereClause (hashes) {
 
 function newTrackId (trackDb, name) {
   return trackDb
-    .run(`INSERT INTO track(name) values('${name}')`)
+    .run(`INSERT INTO track(name, uuid) values('${name}','${uuidv4()}')`)
     .then(_ => trackDb.get('SELECT max(id) FROM track'))
     .then(row => Promise.resolve(row['max(id)']))
 }
