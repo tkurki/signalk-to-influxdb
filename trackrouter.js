@@ -64,12 +64,12 @@ function createTrackRouter (getClient, getPeriods) {
             .map(query => query.replace(/\s\s+/g, ' '))
           debug(queries)
 
-          return getClient().query(queries).then(result => {
+          return getClient().query(queries).then(results => {
             res.type('application/vnd.geo+json')
             try {
               const featureCollection = toFeatureCollection(
                 periods, 
-                queries.length === 1 ? [result] : result,
+                queries.length === 1 ? [results] : results,
                 dataPaths
               )
               res.json(featureCollection)
