@@ -87,6 +87,13 @@ function createTrackRouter (getClient, getPeriods) {
     }
 
     router.get('/vessels/self/tracks', trackHandler)
+
+    function seriesHandler(req, res, next) {
+      getClient().query(`SHOW MEASUREMENTS ON signalk`).then(result => {
+        res.json(result.map(row => ({source: 'todo!',name: row.name})))
+      })
+    }
+    router.get('/vessels/self/data/series', seriesHandler)
     return router
   }
 }
