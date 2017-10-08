@@ -198,7 +198,7 @@ module.exports = function (app) {
         Bacon.combineWith(function (awa, aws, sog, cog) {
           return [
             {
-              measurement: 'environmentWindDirectionTrue',
+              measurement: 'environment.wind.directionTrue',
               timestamp: new Date(awa.timestamp),
               fields: {
                 value:
@@ -206,7 +206,7 @@ module.exports = function (app) {
               }
             },
             {
-              measurement: 'environmentWindSpeedTrue',
+              measurement: 'environment.wind.speedTrue',
               timestamp: new Date(aws.timestamp),
               fields: {
                 value: getTrueWindSpeed(sog.value, aws.value, awa.value)
