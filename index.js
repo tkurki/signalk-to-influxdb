@@ -22,6 +22,7 @@ module.exports = function (app) {
   let client
   let selfContext = 'vessels.' + app.selfId
   let lastPositionStored = 0
+  let recordTrack = false
 
   let unsubscribes = []
   let shouldStore = function (path) {
@@ -37,18 +38,10 @@ module.exports = function (app) {
       delta.updates.forEach(update => {
         if (update.values) {
           var points = update.values.reduce((acc, pathValue) => {
-            if (shouldStore(pathValue.path)) {
-              if (typeof pathValue.value === 'number') {
-                acc.push({
-                  measurement: pathValue.path,
-                  fields: {
-                    value: pathValue.value
-                  }
-                })
-              } else if (
-                pathValue.path === 'navigation.position' &&
-                new Date().getTime() - lastPositionStored > 1000
-              ) {
+            if ( pathValue.path === 'navigation.position' ) {
+              if ( recordTrack &&
+                   new Date().getTime() - lastPositionStored > 1000
+                 ) {
                 acc.push({
                   measurement: pathValue.path,
                   fields: {
@@ -60,6 +53,15 @@ module.exports = function (app) {
                 })
                 lastPositionStored = new Date().getTime()
               }
+            } else if (shouldStore(pathValue.path)) {
+              if (typeof pathValue.value === 'number') {
+                acc.push({
+                  measurement: pathValue.path,
+                  fields: {
+                    value: pathValue.value
+                  }
+                })
+              } 
             }
             return acc
           }, [])
@@ -131,6 +133,12 @@ module.exports = function (app) {
           title: 'Resolution (ms)',
           default: 200
         },
+        recordTrack: {
+          type: "boolean",
+          title: "Record Track",
+          description: "When enabled the vessels position will be stored",
+          default: false
+        },
         blackOrWhite: {
           type: 'string',
           title: 'Type of List',
@@ -194,6 +202,8 @@ module.exports = function (app) {
           }
         }
       }
+
+      recordTrack = options.recordTrack
 
       app.signalk.on('delta', handleDelta)
 
