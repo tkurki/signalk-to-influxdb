@@ -1,3 +1,20 @@
+/*
+ * Copyright 2018 Teppo Kurki <teppo.kurki@iki.fi>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+const Influx = require('influx')
+
 module.exports = {
   deltaToPointsConverter: (selfContext, recordTrack, shouldStore) => {
     return delta => {
@@ -42,5 +59,31 @@ module.exports = {
       }
       return points
     }
+  },
+  influxClientP: ({ host, port, database }) => {
+    return new Promise((resolve, reject) => {
+      const client = new Influx.InfluxDB({
+        host: host,
+        port: port, // optional, default 8086
+        protocol: 'http', // optional, default 'http'
+        database: database
+      })
+
+      client
+        .getDatabaseNames()
+        .then(names => {
+          if (names.includes(database)) {
+            resolve(client)
+          } else {
+            client.createDatabase(database).then(result => {
+              console.log('Created InfluxDb database ' + database)
+              resolve(client)
+            })
+          }
+        })
+        .catch(err => {
+          reject(err)
+        })
+    })
   }
 }
