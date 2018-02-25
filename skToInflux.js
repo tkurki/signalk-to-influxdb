@@ -14,6 +14,8 @@
  */
 
 const Influx = require('influx')
+const debug = require('debug')('signalk-to-influxdb')
+
 
 module.exports = {
   deltaToPointsConverter: (
@@ -73,6 +75,7 @@ module.exports = {
     }
   },
   influxClientP: ({ host, port, database }) => {
+    debug(`Attempting connection to ${host}${port} ${database}`)
     return new Promise((resolve, reject) => {
       const client = new Influx.InfluxDB({
         host: host,
@@ -84,11 +87,12 @@ module.exports = {
       client
         .getDatabaseNames()
         .then(names => {
+          debug('Connected')
           if (names.includes(database)) {
             resolve(client)
-          } else {
+         } else {
             client.createDatabase(database).then(result => {
-              console.log('Created InfluxDb database ' + database)
+              debug('Created InfluxDb database ' + database)
               resolve(client)
             })
           }
