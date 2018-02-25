@@ -144,10 +144,12 @@ module.exports = function (app) {
         }
       }
       app.signalk.on('delta', handleDelta)
+      unsubscribes.push(() => {
+        app.signalk.removeListener('delta', handleDelta)
+      })
     },
     stop: function () {
       unsubscribes.forEach(f => f())
-      app.signalk.removeListener('delta', handleDelta)
     },
     signalKApiRoutes: function (router) {
       const trackHandler = function (req, res, next) {
