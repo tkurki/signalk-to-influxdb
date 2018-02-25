@@ -206,46 +206,6 @@ module.exports = function (app) {
       recordTrack = options.recordTrack
 
       app.signalk.on('delta', handleDelta)
-
-      unsubscribes.push(
-        Bacon.combineWith(function (awaDeg, aws, sog, cogDeg) {
-          const cog = cogDeg / 180 * Math.PI
-          const awa = awaDeg / 180 * Math.PI
-          return [
-            {
-              measurement: 'environmentWindDirectionTrue',
-              fields: {
-                value: getTrueWindAngle(sog, aws, awa) + cog
-              }
-            },
-            {
-              measurement: 'environmentWindSpeedTrue',
-              fields: {
-                value: getTrueWindSpeed(sog, aws, awa)
-              }
-            }
-          ]
-        }, [
-          'environment.wind.angleApparent',
-          'environment.wind.speedApparent',
-          'navigation.speedOverGround',
-          'navigation.courseOverGroundTrue'
-        ].map(app.streambundle.getSelfStream, app.streambundle))
-          .changes()
-          .debounceImmediate(options.resolution || 200)
-          .onValue(points => {
-            try {
-              client.writePoints(points, function (err, response) {
-                if (err) {
-                  console.error(err)
-                  console.error(response)
-                }
-              })
-            } catch (ex) {
-              console.error(ex.message)
-            }
-          })
-      )
     },
     stop: function () {
       unsubscribes.forEach(f => f())
@@ -301,16 +261,4 @@ function sanitize (influxTime) {
       influxTime.substring(influxTime.length - 1, influxTime.length)
     ]
   )
-}
-
-function getTrueWindAngle (speed, windSpeed, windAngle) {
-  var apparentX = Math.cos(windAngle) * windSpeed
-  var apparentY = Math.sin(windAngle) * windSpeed
-  return Math.atan2(apparentY, -speed + apparentX)
-}
-
-function getTrueWindSpeed (speed, windSpeed, windAngle) {
-  var apparentX = Math.cos(windAngle) * windSpeed
-  var apparentY = Math.sin(windAngle) * windSpeed
-  return Math.sqrt(Math.pow(apparentY, 2) + Math.pow(-speed + apparentX, 2))
 }
