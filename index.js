@@ -17,61 +17,17 @@ const Influx = require('influx')
 const Bacon = require('baconjs')
 const debug = require('debug')('signalk-to-influxdb')
 const util = require('util')
+const skToInflux = require('./skToInflux')
 
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
   let client
   let selfContext = 'vessels.' + app.selfId
   let lastPositionStored = 0
-  let recordTrack = false
 
   let unsubscribes = []
   let shouldStore = function (path) {
     return true
-  }
-
-  function handleDelta (delta) {
-    if (delta.context === 'vessels.self') {
-      delta.context = selfContext
-    }
-
-    if (delta.updates && delta.context === selfContext) {
-      delta.updates.forEach(update => {
-        if (update.values) {
-          var points = update.values.reduce((acc, pathValue) => {
-            if ( pathValue.path === 'navigation.position' ) {
-              if ( recordTrack &&
-                   new Date().getTime() - lastPositionStored > 1000
-                 ) {
-                acc.push({
-                  measurement: pathValue.path,
-                  fields: {
-                    value: JSON.stringify([
-                      pathValue.value.longitude,
-                      pathValue.value.latitude
-                    ])
-                  }
-                })
-                lastPositionStored = new Date().getTime()
-              }
-            } else if (shouldStore(pathValue.path)) {
-              if (typeof pathValue.value === 'number') {
-                acc.push({
-                  measurement: pathValue.path,
-                  fields: {
-                    value: pathValue.value
-                  }
-                })
-              } 
-            }
-            return acc
-          }, [])
-          if (points.length > 0) {
-            client.writePoints(points).catch(logError)
-          }
-        }
-      })
-    }
   }
 
   function toMultilineString (influxResult) {
@@ -195,8 +151,13 @@ module.exports = function (app) {
         }
       }
 
-      recordTrack = options.recordTrack
-
+      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore)
+      handleDelta = delta => {
+        const points = deltaToPoints(delta)
+        if (points.length > 0) {
+          client.writePoints(points).catch(logError)
+        }
+      }
       app.signalk.on('delta', handleDelta)
     },
     stop: function () {
