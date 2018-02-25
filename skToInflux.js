@@ -59,7 +59,7 @@ module.exports = {
                     }
                   }
                   if (useDeltaTimestamp) {
-                    point.fields.timestamp = new Date(update.timestamp)
+                    point.timestamp = new Date(update.timestamp)
                   }
                   acc.push(point)
                 }
