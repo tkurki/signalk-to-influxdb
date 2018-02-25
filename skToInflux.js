@@ -16,7 +16,12 @@
 const Influx = require('influx')
 
 module.exports = {
-  deltaToPointsConverter: (selfContext, recordTrack, shouldStore) => {
+  deltaToPointsConverter: (
+    selfContext,
+    recordTrack,
+    shouldStore,
+    useDeltaTimestamp = false
+  ) => {
     return delta => {
       if (delta.context === 'vessels.self') {
         delta.context = selfContext
@@ -43,13 +48,20 @@ module.exports = {
                   lastPositionStored = new Date().getTime()
                 }
               } else if (shouldStore(pathValue.path)) {
-                if (typeof pathValue.value === 'number') {
-                  acc.push({
+                if (
+                  typeof pathValue.value === 'number' &&
+                  !isNaN(pathValue.value)
+                ) {
+                  const point = {
                     measurement: pathValue.path,
                     fields: {
                       value: pathValue.value
                     }
-                  })
+                  }
+                  if (useDeltaTimestamp) {
+                    point.fields.timestamp = new Date(update.timestamp)
+                  }
+                  acc.push(point)
                 }
               }
               return acc
