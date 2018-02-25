@@ -19,6 +19,7 @@ const debug = require('debug')('signalk-to-influxdb')
 const util = require('util')
 
 module.exports = function (app) {
+  const logError = app.error || ((err) => {console.error(err)})
   let client
   let selfContext = 'vessels.' + app.selfId
   let lastPositionStored = 0
@@ -66,16 +67,7 @@ module.exports = function (app) {
             return acc
           }, [])
           if (points.length > 0) {
-            try {
-              client.writePoints(points, function (err, response) {
-                if (err) {
-                  console.error(err.message)
-                  console.error(response)
-                }
-              })
-            } catch (ex) {
-              console.error(ex.message)
-            }
+            client.writePoints(points).catch(logError)
           }
         }
       })
