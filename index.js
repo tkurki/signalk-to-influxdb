@@ -13,7 +13,6 @@
  * limitations under the License.
  */
 
-const Influx = require('influx')
 const Bacon = require('baconjs')
 const debug = require('debug')('signalk-to-influxdb')
 const util = require('util')
@@ -21,7 +20,7 @@ const skToInflux = require('./skToInflux')
 
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
-  let client
+  let clientP
   let selfContext = 'vessels.' + app.selfId
   let lastPositionStored = 0
 
@@ -109,25 +108,7 @@ module.exports = function (app) {
     },
 
     start: function (options) {
-      client = new Influx.InfluxDB({
-        host: options.host,
-        port: options.port, // optional, default 8086
-        protocol: 'http', // optional, default 'http'
-        database: options.database
-      })
-
-      client
-        .getDatabaseNames()
-        .then(names => {
-          if (!names.includes(options.database)) {
-            client.createDatabase(options.database).then(result => {
-              console.log('Created InfluxDb database ' + options.database)
-            })
-          }
-        })
-        .catch(err => {
-          console.error(err)
-        })
+      clientP = skToInflux.influxClientP(options)
 
       if (
         typeof options.blackOrWhitelist !== 'undefined' &&
@@ -155,7 +136,11 @@ module.exports = function (app) {
       handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {
-          client.writePoints(points).catch(logError)
+          clientP
+          .then(client => {
+            client.writePoints(points)
+          })
+          .catch(logError)
         }
       }
       app.signalk.on('delta', handleDelta)
@@ -166,7 +151,7 @@ module.exports = function (app) {
     },
     signalKApiRoutes: function (router) {
       const trackHandler = function (req, res, next) {
-        if (typeof client === 'undefined') {
+        if (typeof clientP === 'undefined') {
           console.error(
             'signalk-to-influxdb plugin not enabled, http track interface not available'
           )
@@ -179,16 +164,17 @@ module.exports = function (app) {
         from "navigation.position"
         where time >= now() - ${sanitize(req.query.timespan || '1h')}
         group by time(${sanitize(req.query.resolution || '1m')})`
-        client
-          .query(query)
+        clientP.then(client => {
+          client.query(query)
           .then(result => {
             res.type('application/vnd.geo+json')
             res.json(toMultilineString(result))
           })
-          .catch(err => {
-            console.error(err.message + ' ' + query)
-            res.status(500).send(err.message + ' ' + query)
-          })
+        }).catch(err => {
+          console.error(err.message + ' ' + query)
+          res.status(500).send(err.message + ' ' + query)
+        })
+
       }
 
       router.get('/self/track', trackHandler)
