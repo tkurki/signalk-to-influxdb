@@ -49,6 +49,31 @@ module.exports = {
                   })
                   lastPositionStored = new Date().getTime()
                 }
+              } else if (pathValue.path === 'navigation.attitude') {
+                if (typeof pathValue.value.pitch === 'number' && !isNaN(pathValue.value.pitch)) {
+                  acc.push({
+                    measurement: 'navigation.attitude.pitch',
+                    fields: {
+                      value: pathValue.value.pitch
+                    }
+                  })
+                }
+                if (typeof pathValue.value.roll === 'number' && !isNaN(pathValue.value.roll)) {
+                  acc.push({
+                    measurement: 'navigation.attitude.roll',
+                    fields: {
+                      value: pathValue.value.roll
+                    }
+                  })
+                }
+                if (typeof pathValue.value.yaw === 'number' && !isNaN(pathValue.value.yaw)) {
+                  acc.push({
+                    measurement: 'navigation.attitude.yaw',
+                    fields: {
+                      value: pathValue.value.yaw
+                    }
+                  })
+                }
               } else if (shouldStore(pathValue.path)) {
                 if (
                   typeof pathValue.value === 'number' &&
