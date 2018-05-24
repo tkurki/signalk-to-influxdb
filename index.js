@@ -22,7 +22,6 @@ module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
   let clientP
   let selfContext = 'vessels.' + app.selfId
-  let lastPositionStored = 0
 
   let unsubscribes = []
   let shouldStore = function (path) {
