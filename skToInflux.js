@@ -34,11 +34,13 @@ module.exports = {
       if (delta.updates && delta.context === selfContext) {
         delta.updates.forEach(update => {
           if (update.values) {
+            let date = new Date(update.timestamp)
+            let time = date.getTime()
             points = update.values.reduce((acc, pathValue) => {
               if (pathValue.path === 'navigation.position') {
                 if (
                   recordTrack &&
-                  new Date().getTime() - lastPositionStored > 1000
+                  time - lastPositionStored > 1000
                 ) {
                   acc.push({
                     measurement: pathValue.path,
@@ -49,12 +51,11 @@ module.exports = {
                       ])
                     }
                   })
-                  lastPositionStored = new Date().getTime()
+                  lastPositionStored = Date.now()
                 }
               } else if (shouldStore(pathValue.path)) {
-                var now = Date.now()
-                if ( !lastUpdates[pathValue.path] || now - lastUpdates[pathValue.path] > resolution ) {
-                  lastUpdates[pathValue.path] = now
+                if ( !lastUpdates[pathValue.path] || time - lastUpdates[pathValue.path] > resolution ) {
+                  lastUpdates[pathValue.path] = time
                   if (pathValue.path === 'navigation.attitude') {
                     if (typeof pathValue.value.pitch === 'number' && !isNaN(pathValue.value.pitch)) {
                       acc.push({
@@ -91,7 +92,7 @@ module.exports = {
                       }
                     }
                     if (useDeltaTimestamp) {
-                    point.timestamp = new Date(update.timestamp)
+                      point.timestamp = date
                     }
                     acc.push(point)
                   }
