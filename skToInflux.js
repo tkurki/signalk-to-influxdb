@@ -17,6 +17,7 @@ const Influx = require('influx')
 const debug = require('debug')('signalk-to-influxdb')
 
 var lastUpdates = {}
+var lastPositionStored = 0
 
 module.exports = {
   deltaToPointsConverter: (
