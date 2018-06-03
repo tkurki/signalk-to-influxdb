@@ -131,7 +131,7 @@ module.exports = function (app) {
         }
       }
 
-      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore)
+      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200)
       handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {

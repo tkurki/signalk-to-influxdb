@@ -16,6 +16,7 @@
 const Influx = require('influx')
 const debug = require('debug')('signalk-to-influxdb')
 
+var lastUpdates = {}
 var lastPositionStored = 0
 
 module.exports = {
@@ -23,6 +24,7 @@ module.exports = {
     selfContext,
     recordTrack,
     shouldStore,
+    resolution,
     useDeltaTimestamp = false
   ) => {
     return delta => {
@@ -33,11 +35,13 @@ module.exports = {
       if (delta.updates && delta.context === selfContext) {
         delta.updates.forEach(update => {
           if (update.values) {
+            let date = new Date(update.timestamp)
+            let time = date.getTime()
             points = update.values.reduce((acc, pathValue) => {
               if (pathValue.path === 'navigation.position') {
                 if (
                   recordTrack &&
-                  new Date().getTime() - lastPositionStored > 1000
+                  time - lastPositionStored > 1000
                 ) {
                   acc.push({
                     measurement: pathValue.path,
@@ -48,48 +52,51 @@ module.exports = {
                       ])
                     }
                   })
-                  lastPositionStored = new Date().getTime()
-                }
-              } else if (pathValue.path === 'navigation.attitude') {
-                if (typeof pathValue.value.pitch === 'number' && !isNaN(pathValue.value.pitch)) {
-                  acc.push({
-                    measurement: 'navigation.attitude.pitch',
-                    fields: {
-                      value: pathValue.value.pitch
-                    }
-                  })
-                }
-                if (typeof pathValue.value.roll === 'number' && !isNaN(pathValue.value.roll)) {
-                  acc.push({
-                    measurement: 'navigation.attitude.roll',
-                    fields: {
-                      value: pathValue.value.roll
-                    }
-                  })
-                }
-                if (typeof pathValue.value.yaw === 'number' && !isNaN(pathValue.value.yaw)) {
-                  acc.push({
-                    measurement: 'navigation.attitude.yaw',
-                    fields: {
-                      value: pathValue.value.yaw
-                    }
-                  })
+                  lastPositionStored = Date.now()
                 }
               } else if (shouldStore(pathValue.path)) {
-                if (
-                  typeof pathValue.value === 'number' &&
-                  !isNaN(pathValue.value)
-                ) {
-                  const point = {
-                    measurement: pathValue.path,
-                    fields: {
-                      value: pathValue.value
+                if ( !lastUpdates[pathValue.path] || time - lastUpdates[pathValue.path] > resolution ) {
+                  lastUpdates[pathValue.path] = time
+                  if (pathValue.path === 'navigation.attitude') {
+                    if (typeof pathValue.value.pitch === 'number' && !isNaN(pathValue.value.pitch)) {
+                      acc.push({
+                        measurement: 'navigation.attitude.pitch',
+                        fields: {
+                          value: pathValue.value.pitch
+                        }
+                      })
                     }
+                    if (typeof pathValue.value.roll === 'number' && !isNaN(pathValue.value.roll)) {
+                      acc.push({
+                        measurement: 'navigation.attitude.roll',
+                        fields: {
+                          value: pathValue.value.roll
+                        }
+                      })
+                    }
+                    if (typeof pathValue.value.yaw === 'number' && !isNaN(pathValue.value.yaw)) {
+                      acc.push({
+                        measurement: 'navigation.attitude.yaw',
+                      fields: {
+                        value: pathValue.value.yaw
+                      }
+                      })
+                    }
+                  } else if (
+                    typeof pathValue.value === 'number' &&
+                      !isNaN(pathValue.value)
+                  ) {
+                    const point = {
+                      measurement: pathValue.path,
+                      fields: {
+                        value: pathValue.value
+                      }
+                    }
+                    if (useDeltaTimestamp) {
+                      point.timestamp = date
+                    }
+                    acc.push(point)
                   }
-                  if (useDeltaTimestamp) {
-                    point.timestamp = new Date(update.timestamp)
-                  }
-                  acc.push(point)
                 }
               }
               return acc
