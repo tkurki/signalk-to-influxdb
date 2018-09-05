@@ -78,7 +78,7 @@ module.exports = function (app) {
         skPath = null
       }
     }
-    return { skPath: skPath, contextClause: contextClause }
+    return { skPath, contextClause }
   }
 
   function getQuery(startTime, endTime, pathElements) {
