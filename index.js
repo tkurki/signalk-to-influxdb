@@ -228,6 +228,11 @@ module.exports = function (app) {
           type: 'string',
           title: 'Database'
         },
+        batchWriteInterval: {
+          type: 'number',
+          title: "Batch writes interval (in seconds, 0 means don't batch)",
+          default: 10,
+        },
         resolution: {
           type: 'number',
           title: 'Resolution (ms)',
@@ -294,14 +299,27 @@ module.exports = function (app) {
         }
       }
       let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200, options.storeOthers)
+      let accumulatedPoints = []
+      let lastWriteTime = Date.now()
+      let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
       handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {
-          clientP
-          .then(client => {
-            client.writePoints(points)
-          })
-          .catch(logError)
+          accumulatedPoints = accumulatedPoints.concat(points)
+          let now = Date.now()
+          if  ( batchWriteInterval == 0 || now - lastWriteTime > batchWriteInterval ) {
+            lastWriteTime = now
+            clientP
+              .then(client => {
+                client.writePoints(accumulatedPoints)
+                accumulatedPoints = []
+
+              })
+              .catch(error => {
+                logError(error)
+                accumulatedPoints = []
+              })
+          }
         }
       }
       app.signalk.on('delta', handleDelta)
