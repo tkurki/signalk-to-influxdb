@@ -15,9 +15,20 @@
 
 const Influx = require('influx')
 const debug = require('debug')('signalk-to-influxdb')
+const _ = require('lodash')
+const { getSourceId } = require('@signalk/signalk-schema')
 
 var lastUpdates = {}
-var lastPositionStored = 0
+var lastPositionStored = {}
+
+function addSource(update, tags) {
+  if ( update['$source'] ) {
+    tags.source = update['$source']
+  } else if ( update['source'] ) {
+    tags.source = getSourceId(update['source'])
+  }
+  return tags
+}
 
 module.exports = {
   deltaToPointsConverter: (
@@ -25,77 +36,80 @@ module.exports = {
     recordTrack,
     shouldStore,
     resolution,
-    useDeltaTimestamp = false
+    storeOthers
   ) => {
     return delta => {
+    
       if (delta.context === 'vessels.self') {
         delta.context = selfContext
       }
       let points = []
-      if (delta.updates && delta.context === selfContext) {
+      if (delta.updates && (storeOthers || delta.context === selfContext)) {
         delta.updates.forEach(update => {
           if (update.values) {
             let date = new Date(update.timestamp)
             let time = date.getTime()
+            let tags = addSource(update, { context: delta.context })
+
             points = update.values.reduce((acc, pathValue) => {
+     
               if (pathValue.path === 'navigation.position') {
-                if (
-                  recordTrack &&
-                  time - lastPositionStored > 1000
-                ) {
-                  acc.push({
+                if ( shouldStorePositionNow(delta, recordTrack, time) ) {
+                  const point = {
                     measurement: pathValue.path,
+                    tags: tags,
+                    timestamp: date,
                     fields: {
-                      value: JSON.stringify([
-                        pathValue.value.longitude,
-                        pathValue.value.latitude
-                      ])
+                      jsonValue: JSON.stringify({
+                        longitude: pathValue.value.longitude,
+                        latitude: pathValue.value.latitude
+                      })
                     }
-                  })
-                  lastPositionStored = Date.now()
+                  }
+                  acc.push(point)
+                  lastPositionStored[delta.context] = time
                 }
-              } else if (shouldStore(pathValue.path)) {
-                if ( !lastUpdates[pathValue.path] || time - lastUpdates[pathValue.path] > resolution ) {
-                  lastUpdates[pathValue.path] = time
-                  if (pathValue.path === 'navigation.attitude') {
-                    if (typeof pathValue.value.pitch === 'number' && !isNaN(pathValue.value.pitch)) {
-                      acc.push({
-                        measurement: 'navigation.attitude.pitch',
+              } else if (shouldStoreNow(delta, pathValue.path, shouldStore, time, resolution)) {
+                if ( !lastUpdates[delta.context] )
+                  lastUpdates[delta.context] = {}
+                lastUpdates[delta.context][pathValue.path] = time
+                if (pathValue.path === 'navigation.attitude') {
+                  storeAttitude(date, pathValue, tags, acc)
+                } else {
+                  function addPoint(path, value) {
+                    let valueKey = null
+                    
+                    if ( typeof value === 'number' &&
+                         !isNaN(value) ) {
+                      valueKey = 'value'
+                    } else if ( typeof value === 'string' ) {
+                      valueKey = 'stringValue'
+                    } else if ( typeof value === 'boolean' ) {
+                      valueKey = 'boolValue'
+                    } else {
+                        valueKey = 'jsonValue'
+                      value = JSON.stringify(value)
+                    }
+                    
+                    if ( valueKey ) {
+                      const point = {
+                        measurement: path,
+                        timestamp: date,
+                        tags: tags,
                         fields: {
-                          value: pathValue.value.pitch
+                          [valueKey]: value
                         }
-                      })
-                    }
-                    if (typeof pathValue.value.roll === 'number' && !isNaN(pathValue.value.roll)) {
-                      acc.push({
-                        measurement: 'navigation.attitude.roll',
-                        fields: {
-                          value: pathValue.value.roll
-                        }
-                      })
-                    }
-                    if (typeof pathValue.value.yaw === 'number' && !isNaN(pathValue.value.yaw)) {
-                      acc.push({
-                        measurement: 'navigation.attitude.yaw',
-                      fields: {
-                        value: pathValue.value.yaw
                       }
-                      })
+                      acc.push(point)
                     }
-                  } else if (
-                    typeof pathValue.value === 'number' &&
-                      !isNaN(pathValue.value)
-                  ) {
-                    const point = {
-                      measurement: pathValue.path,
-                      fields: {
-                        value: pathValue.value
-                      }
-                    }
-                    if (useDeltaTimestamp) {
-                      point.timestamp = date
-                    }
-                    acc.push(point)
+                  }
+                  
+                  if ( pathValue.path === '' ) {
+                    _.keys(pathValue.value).forEach(key => {
+                        addPoint(key, pathValue.value[key])
+                    })
+                  } else {
+                    addPoint(pathValue.path, pathValue.value)
                   }
                 }
               }
@@ -135,4 +149,33 @@ module.exports = {
         })
     })
   }
+}
+
+function shouldStorePositionNow(delta, recordTrack, time) {
+  return recordTrack
+    && (!lastPositionStored[delta.context]
+        || time - lastPositionStored[delta.context] > 1000)
+}
+
+function shouldStoreNow(delta, path, shouldStore, time, resolution) {
+  return shouldStore(path)
+    && (!lastUpdates[delta.context] || !lastUpdates[delta.context][path] ||
+        time - lastUpdates[delta.context][path] > resolution )
+}
+
+  
+function storeAttitude(date, pathValue, tags, acc) {
+  ['pitch', 'roll', 'yaw'].forEach(key => {
+    if (typeof pathValue.value[key] === 'number' &&
+        !isNaN(pathValue.value[key])) {
+      acc.push({
+        measurement: `navigation.attitude.${key}`,
+        timestamp: date,
+        tags: tags,
+        fields: {
+          value: pathValue.value[key]
+        }
+      })
+    }
+  })
 }

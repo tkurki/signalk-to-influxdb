@@ -36,10 +36,18 @@ module.exports = function (app) {
     }
 
     influxResult.forEach(row => {
-      if (row.position === null) {
+      if (row.position === null && row.jsonPosition == null ) {
         currentLine = []
       } else {
-        currentLine[currentLine.length] = JSON.parse(row.position)
+        let position
+        if ( row.position ) {
+          position = JSON.parse(row.position)
+        } else {
+          position = JSON.parse(row.jsonPosition)
+          position = [ position.longitude, position.latitude ]
+        }
+        
+        currentLine[currentLine.length] = position
         if (currentLine.length === 1) {
           result.coordinates[result.coordinates.length] = currentLine
         }
@@ -50,8 +58,154 @@ module.exports = function (app) {
   function timewindowStart () {
     return new Date(new Date().getTime() - 60 * 60 * 1000).toISOString()
   }
+  function getContextClause(pathElements) {
+    let skPath = null
+    let contextClause = ''
 
-  return {
+    if ( pathElements != null ) {
+      if ( pathElements.length == 1 ) {
+        contextClause = `and context =~ /${pathElements[0]}.*/`
+      } else if ( pathElements.length > 1 ) {
+        let context = pathElements[1]
+        if ( context == 'self' ) {
+          context = app.selfId
+        }
+        contextClause = `and context =~ /${pathElements[0]}\.${context}\.*/`
+      }
+      
+      skPath = pathElements.slice(2).join('.')
+      if ( skPath.length === 0 ) {
+        skPath = null
+      }
+    }
+    return { skPath, contextClause }
+  }
+
+  function getQuery(startTime, endTime, pathElements) {
+    const { skPath, contextClause } = getContextClause(pathElements)
+
+    const measurements = skPath ? `/${skPath}.*/` : '/.*/'
+    const whereClause = `time > '${startTime.toISOString()}' and time <= '${endTime.toISOString()}' ${contextClause}`
+    const query = `${measurements}
+        where ${whereClause} group by context order by time desc limit 1`
+    return {query: query, skPath: skPath, whereClause:whereClause}
+  }
+
+  function getHistory (startTime, endTime, pathElements, cb) {
+    const { query, skPath, whereClause } = getQuery(startTime, endTime, pathElements)
+    app.debug('history query: %s', query)
+    clientP.then(client => {
+      client.query(`select * from ${query}`)
+        .then(result => {
+          let attitude = {}
+
+          let deltas = result.groupRows.map(row => {
+            let path = row.name
+            let value = row.rows[0].value
+            const {source, stringValue, jsonValue, boolValue} = row.rows[0]
+            let context
+
+            if ( row.tags && row.tags.context ) {
+              context = row.tags.context
+            } else {
+              context = 'vessels.' + app.selfId
+            }
+
+            let ts = row.rows[0].time.toISOString()
+
+            if ( path.startsWith('navigation.attitude') ) {
+              let parts = path.split('.')
+              attitude[parts[parts.length-1]] = value
+              attitude.timestamp = ts
+              attitude.$source = source
+              attitude.context = context
+              return null
+            } else {
+              if ( jsonValue != null ) {
+                value = JSON.parse(jsonValue)
+              } else if ( stringValue != null ) {
+                value = stringValue
+              } else if ( boolValue != null ) {
+                value = boolValue
+              }
+
+              if ( path.indexOf('.') == -1 )
+              {
+                value = { [path]: value }
+                path = ''
+              }
+              
+              return {
+                context: context,
+                updates: [{
+                  timestamp: ts,
+                  $source: source,
+                  values: [{
+                    path: path,
+                    value: value
+                  }]
+                }]
+              }
+            }
+          }).filter(d => d != null)
+
+          if ( attitude.timestamp ) {
+            const ts = attitude.timestamp
+            const $source = attitude.$source
+            const context = attitude.context
+            delete attitude.timestamp
+            delete attitude.$source
+            delete attitude.context
+            deltas.push({
+              context: context,
+              updates: [{
+                timestamp: ts,
+                $source: $source,
+                values: [{
+                  path: 'navigation.attitude',
+                    value: attitude
+                }]
+              }]
+            })
+          }
+
+          //this is for backwards compatibility
+          if ( skPath == null || skPath === 'navigation' || skPath === 'navigation.position' ) {
+            let posQuery = `select value from "navigation.position" where ${whereClause} order by time desc limit 1`
+            client.query(posQuery).then(result => {
+              if ( result.length > 0 ) {
+                let pos = JSON.parse(result[0].value)
+                deltas.push({
+                  context: 'vessels.' + app.selfId,
+                  updates: [{
+                    timestamp: result[0].time.toISOString(),
+                    values: [{
+                      path: 'navigation.position',
+                      value: {
+                        latitude: pos[1],
+                        longitude: pos[0]
+                      }
+                  }]
+                  }]
+                })
+              }
+              cb(deltas)
+            })
+          }
+          else
+          {
+            cb(deltas)
+          }
+        }).catch(err => {
+          console.error(err)
+        })    
+    }).catch(err => {
+      console.error(err)
+    })    
+  }
+
+
+  let plugin = {
     id: 'signalk-to-influxdb',
     name: 'InfluxDb writer',
     description: 'Signal K server plugin that writes self values to InfluxDb',
@@ -85,6 +239,12 @@ module.exports = function (app) {
           description: "When enabled the vessels position will be stored",
           default: false
         },
+        storeOthers: {
+          type: "boolean",
+          title: "Record Others",
+          description: "When enabled data from other vessels, atons and sar aircraft will be stored ",
+          default: false
+        },
         blackOrWhite: {
           type: 'string',
           title: 'Type of List',
@@ -109,6 +269,9 @@ module.exports = function (app) {
     start: function (options) {
       clientP = skToInflux.influxClientP(options)
 
+      if ( app.registerHistoryProvider )
+        app.registerHistoryProvider(plugin)
+
       if (
         typeof options.blackOrWhitelist !== 'undefined' &&
         typeof options.blackOrWhite !== 'undefined' &&
@@ -130,8 +293,7 @@ module.exports = function (app) {
           }
         }
       }
-
-      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200)
+      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200, options.storeOthers)
       handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {
@@ -161,7 +323,7 @@ module.exports = function (app) {
         }
 
         let query = `
-        select first(value) as "position"
+        select first(value) as "position", first(jsonValue) as "jsonPosition"
         from "navigation.position"
         where time >= now() - ${sanitize(req.query.timespan || '1h')}
         group by time(${sanitize(req.query.resolution || '1m')})`
@@ -182,8 +344,61 @@ module.exports = function (app) {
       router.get('/vessels/self/track', trackHandler)
       router.get('/vessels/' + app.selfId + '/track', trackHandler)
       return router
+    },
+
+    historyStreamers: {},
+    streamHistory: (cookie, options, onDelta) => {
+      let playbackRate = options.playbackRate || 1
+      
+      let startTime = options.startTime
+
+      app.debug(`starting streaming: ${startTime} ${playbackRate} `)
+
+      let pathElements = getPathFromOptions(options)
+
+      plugin.historyStreamers[cookie] = setInterval( () => {
+        let endTime = new Date(startTime.getTime() + (1000 * playbackRate))
+        getHistory(startTime, endTime, pathElements, (deltas) => {
+          app.debug(`sending ${deltas.length} deltas`)
+          deltas.forEach(onDelta)
+        })
+        startTime = endTime
+      }, 1000)
+
+      return () => {
+        app.debug(`stop streaming: ${cookie}`)
+        clearInterval(plugin.historyStreamers[cookie])
+        delete plugin.historyStreamers[cookie]
+      }
+    },
+
+    hasAnyData: (options, cb) => {
+      const pathElements = getPathFromOptions(options)
+      const endTime = new Date(options.startTime.getTime() + (1000 * 10))
+      const { query, skPath } = getQuery(options.startTime, endTime, pathElements)
+      
+      clientP.then(client => {
+        client.query(`select count(*) from ${query}`)
+          .then(result => {
+            cb(result.length > 0)
+          }).catch(err => {
+            console.error(err)
+            cb(false)
+          })    
+      }).catch(err => {
+        console.error(err)
+        cb(false)
+      })
+    },
+    
+    getHistory: (date, pathElements, cb) => {
+      let startTime = new Date(date.getTime() - (1000 * 60 * 5))
+      getHistory(startTime, date, pathElements, (deltas) => {
+        cb(deltas)
+      })
     }
   }
+  return plugin
 }
 
 const influxDurationKeys = {
@@ -201,4 +416,13 @@ function sanitize (influxTime) {
       influxTime.substring(influxTime.length - 1, influxTime.length)
     ]
   )
+}
+
+
+function getPathFromOptions(options) {
+  if ( options.subscribe && options.subscribe === 'self' ) {
+    return ['vessels', 'self']
+  } else {
+    return null
+  }
 }

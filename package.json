@@ -13,9 +13,11 @@
   "author": "Teppo Kurki <teppo.kurki@iki,fi>",
   "license": "ISC",
   "dependencies": {
+    "@signalk/signalk-schema": "^1.0.3",
     "baconjs": "^0.7.88",
     "debug": "^2.2.0",
-    "influx": "^5.0.0"
+    "influx": "^5.0.7",
+    "lodash": "^4.17.10"
   },
   "devDependencies": {
     "prettier-standard": "^6.0.0"
