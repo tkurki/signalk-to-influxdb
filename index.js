@@ -343,7 +343,8 @@ module.exports = function (app) {
         let query = `
         select first(value) as "position", first(jsonValue) as "jsonPosition"
         from "navigation.position"
-        where time >= now() - ${sanitize(req.query.timespan || '1h')}
+        where context = '${selfContext}'
+        and time >= now() - ${sanitize(req.query.timespan || '1h')}
         group by time(${sanitize(req.query.resolution || '1m')})`
         clientP.then(client => {
           client.query(query)
