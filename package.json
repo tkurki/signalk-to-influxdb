@@ -8,7 +8,8 @@
   },
   "repository": "https://github.com/tkurki/signalk-to-influxdb",
   "keywords": [
-    "signalk-node-server-plugin"
+    "signalk-node-server-plugin",
+    "signalk-webapp"
   ],
   "author": "Teppo Kurki <teppo.kurki@iki,fi>",
   "license": "ISC",

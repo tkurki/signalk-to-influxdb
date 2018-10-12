@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Signal K Track debug (signalk-to-influxdb)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.4/dist/leaflet.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+    crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.3.4/dist/leaflet.js" integrity="sha512-nMMmRyTVoLYqjP9hrbed9S+FzjZHW5gY1TWCHA5ckwXZBadntCNs8kEqAWdrb9O7rxbCaA4lKTIWjDXZxflOcA=="
+    crossorigin=""></script>
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #map {
+      width: 100%;
+      height: 90%;
+    }
+  </style>
+</head>
+
+<body>
+  <fieldset>
+    <legend>Track request parameters</legend>
+
+    <label for="timespan">Timespan</label>
+    <input type="number" id="timespan" name="timespan" step="1" min="1" oninput="fetchTrack()" value="1"/>
+    <select id="timespan-unit" oninput="fetchTrack()">
+      <option value="s">seconds</option>
+      <option value="m" selected="selected">minutes</option>
+      <option value="h">hours</option>
+      <option value="d">days</option>
+      <option value="w">weeks</option>
+    </select>
+    <label for="resolution">Resolution</label>
+    <input type="number" id="resolution" name="resolution" min="1" oninput="fetchTrack()" value="5"/>
+    <select id=resolution-unit oninput="fetchTrack()">
+      <option value="s" selected="selected">seconds</option>
+      <option value="m">minutes</option>
+      <option value="h">hours</option>
+      <option value="d">days</option>
+      <option value="w">weeks</option>
+    </select>
+  </fieldset>
+
+  <div id='map'></div>
+
+  <script>
+    var map = L.map('map').setView([39.74739, -105], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    const timespanValue = document.getElementById("timespan")
+    const timespanUnit = document.getElementById("timespan-unit")
+    const resolutionValue = document.getElementById("resolution")
+    const resolutionUnit = document.getElementById("resolution-unit")
+
+    let layer
+
+    function fetchTrack() {
+      fetch(`/signalk/v1/api/vessels/self/track?timespan=${timespanValue.value}${timespanUnit.value}&resolution=${resolutionValue.value}${resolutionUnit.value}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error("Could not fetch track:" + response.status)
+          }
+          return response.json()
+        })
+        .then(geojson => {
+          if (layer) {
+            map.removeLayer(layer)
+          }
+          layer = L.geoJSON(geojson)
+          layer.addTo(map)
+          map.fitBounds(layer.getBounds())
+        }).catch(error => {
+          alert(error)
+        })
+    }
+    fetchTrack()
+  </script>
+</body>
+
+</html>
