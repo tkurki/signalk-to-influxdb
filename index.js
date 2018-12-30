@@ -244,6 +244,12 @@ module.exports = function (app) {
           description: "When enabled the vessels position will be stored",
           default: false
         },
+        overrideTimeWithNow: {
+          type: "boolean",
+          title: "Override time with current timestamp",
+          description: "By default the timestamp in the incoming data is used. Check this if you want log playback to simulate getting new data",
+          default: false
+        },
         storeOthers: {
           type: "boolean",
           title: "Record Others",
@@ -298,7 +304,7 @@ module.exports = function (app) {
           }
         }
       }
-      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200, options.storeOthers)
+      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200, options.storeOthers, !options.overrideTimeWithNow)
       let accumulatedPoints = []
       let lastWriteTime = Date.now()
       let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000

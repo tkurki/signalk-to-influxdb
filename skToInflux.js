@@ -36,7 +36,8 @@ module.exports = {
     recordTrack,
     shouldStore,
     resolution,
-    storeOthers
+    storeOthers,
+    honorDeltaTimestamp = true
   ) => {
     return delta => {
     
@@ -47,7 +48,7 @@ module.exports = {
       if (delta.updates && (storeOthers || delta.context === selfContext)) {
         delta.updates.forEach(update => {
           if (update.values) {
-            let date = new Date(update.timestamp)
+            let date = honorDeltaTimestamp ? new Date(update.timestamp) : new Date()
             let time = date.getTime()
             let tags = addSource(update, { context: delta.context })
 
