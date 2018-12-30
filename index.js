@@ -311,9 +311,9 @@ module.exports = function (app) {
             lastWriteTime = now
             clientP
               .then(client => {
-                client.writePoints(accumulatedPoints)
+                const thePoints = accumulatedPoints
                 accumulatedPoints = []
-
+                return client.writePoints(thePoints)
               })
               .catch(error => {
                 logError(error)
