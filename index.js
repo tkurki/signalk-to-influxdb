@@ -278,7 +278,19 @@ module.exports = function (app) {
     },
 
     start: function (options) {
-      clientP = skToInflux.influxClientP(options)
+
+      let retryTimeout = 1000
+      function connectToInflux() {
+        clientP = skToInflux.influxClientP(options)
+        clientP.catch(err => {
+          console.error(`Error connecting to InfluxDb, retrying in ${retryTimeout} ms`)
+          setTimeout(() => {
+            connectToInflux()
+          }, retryTimeout)
+          retryTimeout *= retryTimeout > 30 * 1000 ? 1 : 2
+        })
+      }
+      connectToInflux()
 
       if ( app.registerHistoryProvider )
         app.registerHistoryProvider(plugin)
@@ -317,9 +329,9 @@ module.exports = function (app) {
             lastWriteTime = now
             clientP
               .then(client => {
-                client.writePoints(accumulatedPoints)
+                const thePoints = accumulatedPoints
                 accumulatedPoints = []
-
+                return client.writePoints(thePoints)
               })
               .catch(error => {
                 logError(error)
