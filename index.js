@@ -23,6 +23,7 @@ module.exports = function (app) {
   let clientP
   let selfContext = 'vessels.' + app.selfId
 
+  let started = false
   let unsubscribes = []
   let shouldStore = function (path) {
     return true
@@ -278,9 +279,16 @@ module.exports = function (app) {
     },
 
     start: function (options) {
+      started = true
 
       let retryTimeout = 1000
       function connectToInflux() {
+        if (!started) {
+          clientP = Promise.reject('Not started')
+          //Ignore the rejection, otherwise Node complains
+          clientP.catch(() =>{})
+          return
+        }
         clientP = skToInflux.influxClientP(options)
         clientP.catch(err => {
           console.error(`Error connecting to InfluxDb, retrying in ${retryTimeout} ms`)
@@ -347,6 +355,7 @@ module.exports = function (app) {
     },
     stop: function () {
       unsubscribes.forEach(f => f())
+      started = false
     },
     signalKApiRoutes: function (router) {
       const trackHandler = function (req, res, next) {
