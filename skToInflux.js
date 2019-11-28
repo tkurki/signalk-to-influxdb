@@ -161,7 +161,7 @@ function shouldStorePositionNow(delta, recordTrack, time) {
 function shouldStoreNow(delta, path, shouldStore, time, resolution) {
   return shouldStore(path)
     && (!lastUpdates[delta.context] || !lastUpdates[delta.context][path] ||
-        time - lastUpdates[delta.context][path] > resolution )
+        time - lastUpdates[delta.context][path] > resolution || path == "" )
 }
 
   
