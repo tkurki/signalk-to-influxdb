@@ -52,7 +52,7 @@ module.exports = {
             let time = date.getTime()
             let tags = addSource(update, { context: delta.context })
 
-            points = update.values.reduce((acc, pathValue) => {
+            update.values.reduce((acc, pathValue) => {
      
               if (pathValue.path === 'navigation.position') {
                 if ( shouldStorePositionNow(delta, recordTrack, time) ) {
@@ -115,7 +115,7 @@ module.exports = {
                 }
               }
               return acc
-            }, [])
+            }, points)
           }
         })
       }
