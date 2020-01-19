@@ -13,10 +13,10 @@ const contextsDebug = Debug("influxdb:history:contexts");
 const pathsDebug = Debug("influxdb:history:paths");
 const valuesDebug = Debug("influxdb:history:values");
 
-export function registerHistoryAPI(router: Router, influx: InfluxDB) {
+export function registerHistoryApiRoute(router: Router, influx: InfluxDB) {
   console.log('HEP')
   router.get(
-    "/history/values",
+    "/values",
     asyncHandler(
       fromToHandler(
         (...args) => getValues.apply(this, [influx, ...args]),
