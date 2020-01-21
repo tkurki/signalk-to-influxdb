@@ -14,7 +14,6 @@ const pathsDebug = Debug("influxdb:history:paths");
 const valuesDebug = Debug("influxdb:history:values");
 
 export function registerHistoryApiRoute(router: Router, influx: InfluxDB) {
-  console.log('HEP')
   router.get(
     "/values",
     asyncHandler(
@@ -119,13 +118,11 @@ interface ValuesResult {
     from: string;
     to: string;
   };
-  values: [
-    {
-      path: string;
-      method: string;
-      source?: string;
-    }
-  ];
+  values: {
+    path: string;
+    method: string;
+    source?: string;
+  }[];
   data: ValuesResultRow[];
 }
 
@@ -142,33 +139,40 @@ async function getValues(
     ? Number.parseFloat(req.query.resolution)
     : (to.toEpochSecond() - from.toEpochSecond()) / 500;
   const context = req.query.context || "";
-  console.log(req.query.paths);
-  const paths = (req.query.paths || "")
-    .replace(/[^0-9a-z\.,]/gi, "")
+
+  const pathExpressions = (req.query.paths || "")
+    .replace(/[^0-9a-z\.,\:]/gi, "")
     .split(",");
-  const inPaths = paths.map((s: string) => `"${s}"`).join(",");
-  const query = `
-    SELECT 
-      MEAN(value) as value
-    FROM 
-     ${inPaths}
-    WHERE 
-      "context" = 'vessels.urn:mrn:signalk:uuid:c0d79334-4e25-4245-8892-54e8ccc8021d'
-      AND
-      time > '${from.toString()}' and time <= '${to.toString()}'
-    GROUP BY
-      time(${Number(timeResolutionSeconds * 1000).toFixed(0)}ms)
-  `;
-  debug(query);
-  return influx.then(i => i.query(query)).then((result: IResults<any>) => ({
+  const pathSpecs: PathSpec[] = pathExpressions.map(splitPathExpression);
+  const queries = pathSpecs.map(
+    ({ aggregateFunction, path }) => `
+      SELECT
+        ${aggregateFunction} as value
+      FROM
+      "${path}"
+      WHERE
+        "context" = 'vessels.urn:mrn:signalk:uuid:c0d79334-4e25-4245-8892-54e8ccc8021d'
+        AND
+        time > '${from.toString()}' and time <= '${to.toString()}'
+      GROUP BY
+        time(${Number(timeResolutionSeconds * 1000).toFixed(0)}ms)`
+  );
+
+  debug(queries.toString());
+
+  const x: Promise<IResults<any>[]> = Promise.all(
+    queries.map((q: string) => influx.then(i => i.query(q)))
+  );
+
+  return x.then((results: IResults<any>[]) => ({
     context,
-    values: paths.map((path: string) => ({
+    values: pathSpecs.map(({ path, aggregateMethod }) => ({
       path,
-      method: "average",
+      method: aggregateMethod,
       source: null
     })),
     range: { from: from.toString(), to: to.toString() },
-    data: toDataRows(result.groups(), paths)
+    data: toDataRows(results.map(r => r.groups()))
   }));
 }
 
@@ -178,25 +182,24 @@ const toDataRows = <
     value: number;
   }
 >(
-  data: {
-    name: string;
-    rows: T[];
-  }[],
-  paths: string[]
+  dataResults: Array<
+    {
+      name: string;
+      rows: T[];
+    }[]
+  >
 ): ValuesResultRow[] => {
   const resultRows: any[][] = [];
-  data.forEach(series => {
-    const seriesIndex = paths.indexOf(series.name) + 1;
+  dataResults.forEach((data, seriesIndex) => {
+    const series = data[0]; //we always get one result
     series.rows.forEach((row, i) => {
       if (!resultRows[i]) {
         resultRows[i] = [];
       }
       resultRows[i][0] = row.time.toNanoISOString();
-      resultRows[i][seriesIndex] = row.value;
+      resultRows[i][seriesIndex + 1] = row.value;
     });
   });
-  console.log(resultRows[0])
-  console.log(resultRows[resultRows.length -1])
   return resultRows;
 
   // let lastRow: any;
@@ -214,6 +217,28 @@ const toDataRows = <
   //   lastRow[pathIndex] = valueRow[2];
   //   return acc;
   // }, []);
+};
+
+interface PathSpec {
+  path: string;
+  aggregateMethod: string;
+  aggregateFunction: string;
+}
+
+function splitPathExpression(pathExpression: string): PathSpec {
+  const parts = pathExpression.split(":");
+  const aggregateMethod = parts[1] || "average";
+  return {
+    path: parts[0],
+    aggregateMethod,
+    aggregateFunction: functionForAggregate[aggregateMethod] || "MEAN(value)"
+  };
+}
+
+const functionForAggregate = {
+  average: "MEAN(value)",
+  min: "MIN(value)",
+  max: "MAX(value)"
 };
 
 type FromToHandler<T = any> = (
