@@ -158,7 +158,7 @@ async function getValues(
         time(${Number(timeResolutionSeconds * 1000).toFixed(0)}ms)`
   );
 
-  debug(queries.toString());
+  queries.map(s => s.replace(/\n/g, ' ').replace(/ +/g, ' ')).forEach(s => debug(s))
 
   const x: Promise<IResults<any>[]> = Promise.all(
     queries.map((q: string) => influx.then(i => i.query(q)))
