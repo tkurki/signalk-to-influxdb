@@ -172,7 +172,7 @@ async function getValues(
       source: null
     })),
     range: { from: from.toString(), to: to.toString() },
-    data: toDataRows(results.map(r => r.groups()))
+    data: toDataRows(results.map(r => r.groups()), pathSpecs.map(ps => ps.extractValue))
   }));
 }
 
@@ -187,17 +187,19 @@ const toDataRows = <
       name: string;
       rows: T[];
     }[]
-  >
+  >,
+  valueMappers
 ): ValuesResultRow[] => {
   const resultRows: any[][] = [];
   dataResults.forEach((data, seriesIndex) => {
     const series = data[0]; //we always get one result
+    const valueMapper = valueMappers[seriesIndex]
     series.rows.forEach((row, i) => {
       if (!resultRows[i]) {
         resultRows[i] = [];
       }
       resultRows[i][0] = row.time.toNanoISOString();
-      resultRows[i][seriesIndex + 1] = row.value;
+      resultRows[i][seriesIndex + 1] = valueMapper(row);
     });
   });
   return resultRows;
@@ -223,14 +225,30 @@ interface PathSpec {
   path: string;
   aggregateMethod: string;
   aggregateFunction: string;
+  extractValue: (x:any) => any;
 }
+
+const EXTRACT_POSITION = r => {
+  if (r.value) {
+    const position = JSON.parse(r.value)
+    return [position.longitude, position.latitude]
+  }
+  return null
+}
+const EXTRACT_NUMBER = r => r.value
 
 function splitPathExpression(pathExpression: string): PathSpec {
   const parts = pathExpression.split(":");
-  const aggregateMethod = parts[1] || "average";
+  let aggregateMethod = parts[1] || "average";
+  let extractValue = EXTRACT_NUMBER
+  if (parts[0] === 'navigation.position') {
+    aggregateMethod = 'first'
+    extractValue = EXTRACT_POSITION
+  }
   return {
     path: parts[0],
     aggregateMethod,
+    extractValue,
     aggregateFunction: functionForAggregate[aggregateMethod] || "MEAN(value)"
   };
 }
@@ -238,7 +256,8 @@ function splitPathExpression(pathExpression: string): PathSpec {
 const functionForAggregate = {
   average: "MEAN(value)",
   min: "MIN(value)",
-  max: "MAX(value)"
+  max: "MAX(value)",
+  first: "FIRST(jsonValue)"
 };
 
 type FromToHandler<T = any> = (
