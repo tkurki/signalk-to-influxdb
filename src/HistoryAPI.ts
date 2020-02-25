@@ -13,12 +13,12 @@ const contextsDebug = Debug("influxdb:history:contexts");
 const pathsDebug = Debug("influxdb:history:paths");
 const valuesDebug = Debug("influxdb:history:values");
 
-export function registerHistoryApiRoute(router: Router, influx: InfluxDB) {
+export function registerHistoryApiRoute(router: Router, influx: InfluxDB, selfId: string) {
   router.get(
     "/values",
     asyncHandler(
       fromToHandler(
-        (...args) => getValues.apply(this, [influx, ...args]),
+        (...args) => getValues.apply(this, [influx, selfId, ...args]),
         valuesDebug
       )
     )
@@ -130,6 +130,7 @@ type ValuesResultRow = any[];
 
 async function getValues(
   influx: Promise<InfluxDB>,
+  selfId: string,
   from: ZonedDateTime,
   to: ZonedDateTime,
   debug: (s: string) => void,
@@ -138,8 +139,8 @@ async function getValues(
   const timeResolutionSeconds = req.query.resolution
     ? Number.parseFloat(req.query.resolution)
     : (to.toEpochSecond() - from.toEpochSecond()) / 500;
-  const context = req.query.context || "";
-
+  const context = getContext(req.query.context, selfId);
+  debug(context)
   const pathExpressions = (req.query.paths || "")
     .replace(/[^0-9a-z\.,\:]/gi, "")
     .split(",");
@@ -151,7 +152,7 @@ async function getValues(
       FROM
       "${path}"
       WHERE
-        "context" = 'vessels.urn:mrn:signalk:uuid:c0d79334-4e25-4245-8892-54e8ccc8021d'
+        "context" = '${context}'
         AND
         time > '${from.toString()}' and time <= '${to.toString()}'
       GROUP BY
@@ -174,6 +175,14 @@ async function getValues(
     range: { from: from.toString(), to: to.toString() },
     data: toDataRows(results.map(r => r.groups()), pathSpecs.map(ps => ps.extractValue))
   }));
+}
+
+function getContext(contextFromQuery: string, selfId: string) {
+  if (!contextFromQuery || true || contextFromQuery === 'vessels.self' || contextFromQuery === 'self') {
+    return `vessels.${selfId}`
+  }
+  //TODO improve sanitize 
+  return contextFromQuery.replace(/ /gi, '')
 }
 
 const toDataRows = <
