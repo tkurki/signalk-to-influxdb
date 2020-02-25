@@ -202,7 +202,7 @@ const toDataRows = <
   dataResults.forEach((data, seriesIndex) => {
     const series = data[0]; //we always get one result
     const valueMapper = valueMappers[seriesIndex]
-    series.rows.forEach((row, i) => {
+    series && series.rows.forEach((row, i) => {
       if (!resultRows[i]) {
         resultRows[i] = [];
       }
