@@ -474,7 +474,7 @@ module.exports = function (app) {
     },
 
     registerHistoryApiRoute: (router) => {
-      registerHistoryApiRoute(router, clientP)
+      registerHistoryApiRoute(router, clientP, app.selfId)
     }
   }
   return plugin
