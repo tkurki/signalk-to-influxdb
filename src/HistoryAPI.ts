@@ -157,9 +157,8 @@ async function getValues(
         time > '${from.toString()}' and time <= '${to.toString()}'
       GROUP BY
         time(${Number(timeResolutionSeconds * 1000).toFixed(0)}ms)`
-  );
-
-  queries.map(s => s.replace(/\n/g, ' ').replace(/ +/g, ' ')).forEach(s => debug(s))
+  ).map(s => s.replace(/\n/g, ' ').replace(/ +/g, ' '))
+  queries.forEach(s => debug(s))
 
   const x: Promise<IResults<any>[]> = Promise.all(
     queries.map((q: string) => influx.then(i => i.query(q)))
