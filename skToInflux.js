@@ -64,7 +64,9 @@ module.exports = {
                       jsonValue: JSON.stringify({
                         longitude: pathValue.value.longitude,
                         latitude: pathValue.value.latitude
-                      })
+                      }),
+                      lon: pathValue.value.longitude,
+                      lat: pathValue.value.latitude
                     }
                   }
                   acc.push(point)
