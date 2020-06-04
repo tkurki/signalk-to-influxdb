@@ -34,6 +34,7 @@ module.exports = {
   deltaToPointsConverter: (
     selfContext,
     recordTrack,
+    separateLatLon,
     shouldStore,
     resolution,
     storeOthers,
@@ -65,12 +66,23 @@ module.exports = {
                         longitude: pathValue.value.longitude,
                         latitude: pathValue.value.latitude
                       }),
-                      lon: pathValue.value.longitude,
-                      lat: pathValue.value.latitude
                     }
                   }
                   acc.push(point)
                   lastPositionStored[delta.context] = time
+
+                  if (separateLatLon) {
+                    const point = {
+                      measurement: pathValue.path,
+                      tags: tags,
+                      timestamp: date,
+                      fields: {
+                          lon: pathValue.value.longitude,
+                          lat: pathValue.value.latitude
+                      }
+                    }
+                    acc.push(point)
+                  }
                 }
               } else if (shouldStoreNow(delta, pathValue.path, shouldStore, time, resolution)) {
                 if ( !lastUpdates[delta.context] )

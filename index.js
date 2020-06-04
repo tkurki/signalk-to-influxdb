@@ -245,6 +245,12 @@ module.exports = function (app) {
           description: "When enabled the vessels position will be stored",
           default: false
         },
+        separateLatLon: {
+          type: "boolean",
+          title: "Latitude and Longitude as a separate measurements to Influxdb",
+          description: "Enable location data to be used in various ways e.g. in Grafana (mapping, functions, ...)",
+          default: false
+        },
         overrideTimeWithNow: {
           type: "boolean",
           title: "Override time with current timestamp",
@@ -324,7 +330,7 @@ module.exports = function (app) {
           }
         }
       }
-      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200, options.storeOthers, !options.overrideTimeWithNow)
+      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, options.separateLatLon, shouldStore, options.resolution || 200, options.storeOthers, !options.overrideTimeWithNow)
       let accumulatedPoints = []
       let lastWriteTime = Date.now()
       let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
