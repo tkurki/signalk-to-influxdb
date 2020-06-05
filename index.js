@@ -247,7 +247,7 @@ module.exports = function (app) {
         },
         separateLatLon: {
           type: "boolean",
-          title: "Latitude and Longitude as a separate measurements to Influxdb",
+          title: "Latitude and Longitude as separate measurements to Influxdb",
           description: "Enable location data to be used in various ways e.g. in Grafana (mapping, functions, ...)",
           default: false
         },
