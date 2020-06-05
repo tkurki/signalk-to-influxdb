@@ -16,6 +16,7 @@ Adding support for non-self data would be pretty easy by adding context as Influ
 If enabled by black/whitelist configuration `navigation.position` updates are written to the db no more frequently than once per second. More frequent updates are simply ignored.
 
 The coordinates are written as `[lon, lat]` strings for minimal postprocessing in GeoJSON conversion.
+Optionally, coordinates can be written separately to database. This enable location data to be used in various ways e.g. in Grafana (mapping, functions, ...).
 
 The plugin creates `/signalk/vX/api/self/track` endpoint that accepts two parameters:
 - timespan in the xxxY format, where xxx is a Number and Y one of 
