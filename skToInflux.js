@@ -15,7 +15,6 @@
 
 const Influx = require('influx')
 const debug = require('debug')('signalk-to-influxdb')
-const _ = require('lodash')
 const { getSourceId } = require('@signalk/signalk-schema')
 
 var lastUpdates = {}
@@ -127,7 +126,7 @@ module.exports = {
                     }
 
                     if (pathValue.path === '') {
-                      _.keys(pathValue.value).forEach(key => {
+                      Object.keys(pathValue.value).forEach(key => {
                         addPoint(key, pathValue.value[key])
                       })
                     } else {
