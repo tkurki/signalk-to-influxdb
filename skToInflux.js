@@ -56,7 +56,7 @@ module.exports = {
             update.values.reduce((acc, pathValue) => {
      
               if (pathValue.path === 'navigation.position') {
-                if ( shouldStorePositionNow(delta, recordTrack, time) ) {
+                if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
                     measurement: pathValue.path,
                     tags: tags,
@@ -69,8 +69,6 @@ module.exports = {
                     }
                   }
                   acc.push(point)
-                  lastPositionStored[delta.context] = time
-
                   if (separateLatLon) {
                     const point = {
                       measurement: pathValue.path,
@@ -83,48 +81,58 @@ module.exports = {
                     }
                     acc.push(point)
                   }
-                }
-              } else if (shouldStoreNow(delta, pathValue.path, shouldStore, time, resolution)) {
-                if ( !lastUpdates[delta.context] )
-                  lastUpdates[delta.context] = {}
-                lastUpdates[delta.context][pathValue.path] = time
-                if (pathValue.path === 'navigation.attitude') {
-                  storeAttitude(date, pathValue, tags, acc)
-                } else {
-                  function addPoint(path, value) {
-                    let valueKey = null
-                    
-                    if ( typeof value === 'number' &&
-                         !isNaN(value) ) {
-                      valueKey = 'value'
-                    } else if ( typeof value === 'string' ) {
-                      valueKey = 'stringValue'
-                    } else if ( typeof value === 'boolean' ) {
-                      valueKey = 'boolValue'
-                    } else {
-                        valueKey = 'jsonValue'
-                      value = JSON.stringify(value)
-                    }
-                    
-                    if ( valueKey ) {
-                      const point = {
-                        measurement: path,
-                        timestamp: date,
-                        tags: tags,
-                        fields: {
-                          [valueKey]: value
-                        }
-                      }
-                      acc.push(point)
-                    }
+
+                  if (!lastPositionStored[delta.context]) {
+                    lastPositionStored[delta.context] = {}
                   }
-                  
-                  if ( pathValue.path === '' ) {
-                    _.keys(pathValue.value).forEach(key => {
-                        addPoint(key, pathValue.value[key])
-                    })
+                  lastPositionStored[delta.context][tags.source] = time
+                }
+              } else {
+                const pathAndSource = `${pathValue.path}-${tags.source}`
+                if (shouldStore(pathValue.path) &&
+                  (pathValue.path == '' || shouldStoreNow(delta, pathAndSource, time, resolution))
+                ) {
+                  if (!lastUpdates[delta.context]) { lastUpdates[delta.context] = {} }
+                  lastUpdates[delta.context][pathAndSource] = time
+
+                  if (pathValue.path === 'navigation.attitude') {
+                    storeAttitude(date, pathValue, tags, acc)
                   } else {
-                    addPoint(pathValue.path, pathValue.value)
+                    function addPoint(path, value) {
+                      let valueKey = null
+
+                      if (typeof value === 'number' &&
+                        !isNaN(value)) {
+                        valueKey = 'value'
+                      } else if (typeof value === 'string') {
+                        valueKey = 'stringValue'
+                      } else if (typeof value === 'boolean') {
+                        valueKey = 'boolValue'
+                      } else {
+                        valueKey = 'jsonValue'
+                        value = JSON.stringify(value)
+                      }
+
+                      if (valueKey) {
+                        const point = {
+                          measurement: path,
+                          timestamp: date,
+                          tags: tags,
+                          fields: {
+                            [valueKey]: value
+                          }
+                        }
+                        acc.push(point)
+                      }
+                    }
+
+                    if (pathValue.path === '') {
+                      _.keys(pathValue.value).forEach(key => {
+                        addPoint(key, pathValue.value[key])
+                      })
+                    } else {
+                      addPoint(pathValue.path, pathValue.value)
+                    }
                   }
                 }
               }
@@ -166,16 +174,17 @@ module.exports = {
   }
 }
 
-function shouldStorePositionNow(delta, recordTrack, time) {
-  return recordTrack
-    && (!lastPositionStored[delta.context]
-        || time - lastPositionStored[delta.context] > 1000)
+function shouldStorePositionNow(delta, sourceId, time) {
+  if (!lastPositionStored[delta.context]) {
+    lastPositionStored[delta.context] = {}
+  }
+  return (!lastPositionStored[delta.context][sourceId]
+      || time - lastPositionStored[delta.context][sourceId] > 1000)
 }
 
-function shouldStoreNow(delta, path, shouldStore, time, resolution) {
-  return shouldStore(path)
-    && (!lastUpdates[delta.context] || !lastUpdates[delta.context][path] ||
-        time - lastUpdates[delta.context][path] > resolution || path == '' )
+function shouldStoreNow(delta, pathAndSource, time, resolution) {
+  return (!lastUpdates[delta.context] || !lastUpdates[delta.context][pathAndSource] ||
+      time - lastUpdates[delta.context][pathAndSource] > resolution)
 }
 
   
