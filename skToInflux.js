@@ -22,9 +22,9 @@ var lastUpdates = {}
 var lastPositionStored = {}
 
 function addSource(update, tags) {
-  if ( update['$source'] ) {
+  if (update['$source']) {
     tags.source = update['$source']
-  } else if ( update['source'] ) {
+  } else if (update['source']) {
     tags.source = getSourceId(update['source'])
   }
   return tags
@@ -41,7 +41,7 @@ module.exports = {
     honorDeltaTimestamp = true
   ) => {
     return delta => {
-    
+
       if (delta.context === 'vessels.self') {
         delta.context = selfContext
       }
@@ -54,7 +54,7 @@ module.exports = {
             let tags = addSource(update, { context: delta.context })
 
             update.values.reduce((acc, pathValue) => {
-     
+
               if (pathValue.path === 'navigation.position') {
                 if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
@@ -75,8 +75,8 @@ module.exports = {
                       tags: tags,
                       timestamp: date,
                       fields: {
-                          lon: pathValue.value.longitude,
-                          lat: pathValue.value.latitude
+                        lon: pathValue.value.longitude,
+                        lat: pathValue.value.latitude
                       }
                     }
                     acc.push(point)
@@ -160,7 +160,7 @@ module.exports = {
           debug('Connected')
           if (names.includes(database)) {
             resolve(client)
-         } else {
+          } else {
             client.createDatabase(database).then(result => {
               debug('Created InfluxDb database ' + database)
               resolve(client)
@@ -187,11 +187,11 @@ function shouldStoreNow(delta, pathAndSource, time, resolution) {
       time - lastUpdates[delta.context][pathAndSource] > resolution)
 }
 
-  
+
 function storeAttitude(date, pathValue, tags, acc) {
   ['pitch', 'roll', 'yaw'].forEach(key => {
     if (typeof pathValue.value[key] === 'number' &&
-        !isNaN(pathValue.value[key])) {
+      !isNaN(pathValue.value[key])) {
       acc.push({
         measurement: `navigation.attitude.${key}`,
         timestamp: date,
