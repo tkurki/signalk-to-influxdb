@@ -13,10 +13,7 @@
  * limitations under the License.
  */
 
-const Bacon = require('baconjs')
-const debug = require('debug')('signalk-to-influxdb')
-const util = require('util')
-const skToInflux = require('./skToInflux')
+const { deltaToPointsConverter, influxClientP } = require('./skToInflux')
 
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
@@ -295,7 +292,7 @@ module.exports = function (app) {
           clientP.catch(() =>{})
           return
         }
-        clientP = skToInflux.influxClientP(options)
+        clientP = influxClientP(options)
         clientP.catch(err => {
           console.error(`Error connecting to InfluxDb, retrying in ${retryTimeout} ms`)
           setTimeout(() => {
@@ -330,7 +327,7 @@ module.exports = function (app) {
           }
         }
       }
-      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, options.separateLatLon, shouldStore, options.resolution || 200, options.storeOthers, !options.overrideTimeWithNow)
+      let deltaToPoints = deltaToPointsConverter(selfContext, options.recordTrack, options.separateLatLon, shouldStore, options.resolution || 200, options.storeOthers, !options.overrideTimeWithNow)
       let accumulatedPoints = []
       let lastWriteTime = Date.now()
       let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
