@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-const { deltaToPointsConverter, influxClientP } = require('./skToInflux')
+const { deltaToPointsConverter, influxClientP, pruneTimestamps } = require('./skToInflux')
 
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
@@ -352,8 +352,12 @@ module.exports = function (app) {
         }
       }
       app.signalk.on('delta', handleDelta)
+      const pruneInterval = setInterval(() => {
+        pruneTimestamps(1000 * options.resolution)
+      }, 100 * options.resolution)
       unsubscribes.push(() => {
         app.signalk.removeListener('delta', handleDelta)
+        clearInterval(pruneInterval)
       })
     },
     stop: function () {

@@ -171,7 +171,22 @@ module.exports = {
           reject(err)
         })
     })
+  },
+  pruneTimestamps(maxAge) {
+    clearContextTimestamps(lastUpdates, maxAge)
+    clearContextTimestamps(lastPositionStored, maxAge)
   }
+}
+
+function clearContextTimestamps(holder, maxAge) {
+  Object.keys(holder).forEach(context => {
+    const newestTimestamp = Object.keys(holder[context]).reduce((acc, key) => {
+      return Math.max(  acc, holder[context][key])
+    }, 0)
+    if (Date.now() - maxAge > newestTimestamp) {
+      delete holder[context]
+    }
+  })
 }
 
 function shouldStorePositionNow(delta, sourceId, time) {
