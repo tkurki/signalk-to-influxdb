@@ -11,7 +11,7 @@
     "signalk-node-server-plugin",
     "signalk-webapp"
   ],
-  "author": "Teppo Kurki <teppo.kurki@iki,fi>",
+  "author": "Teppo Kurki <teppo.kurki@iki.fi>",
   "license": "ISC",
   "dependencies": {
     "@signalk/signalk-schema": "^1.0.3",
