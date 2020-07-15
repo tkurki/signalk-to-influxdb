@@ -13,16 +13,14 @@
  * limitations under the License.
  */
 
-const Bacon = require('baconjs')
-const debug = require('debug')('signalk-to-influxdb')
-const util = require('util')
-const skToInflux = require('./skToInflux')
+const { deltaToPointsConverter, influxClientP, pruneTimestamps } = require('./skToInflux')
 
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
   let clientP
   let selfContext = 'vessels.' + app.selfId
 
+  let started = false
   let unsubscribes = []
   let shouldStore = function (path) {
     return true
@@ -228,6 +226,11 @@ module.exports = function (app) {
           type: 'string',
           title: 'Database'
         },
+        batchWriteInterval: {
+          type: 'number',
+          title: "Batch writes interval (in seconds, 0 means don't batch)",
+          default: 10,
+        },
         resolution: {
           type: 'number',
           title: 'Resolution (ms)',
@@ -237,6 +240,18 @@ module.exports = function (app) {
           type: "boolean",
           title: "Record Track",
           description: "When enabled the vessels position will be stored",
+          default: false
+        },
+        separateLatLon: {
+          type: "boolean",
+          title: "Latitude and Longitude as separate measurements to Influxdb",
+          description: "Enable location data to be used in various ways e.g. in Grafana (mapping, functions, ...)",
+          default: false
+        },
+        overrideTimeWithNow: {
+          type: "boolean",
+          title: "Override time with current timestamp",
+          description: "By default the timestamp in the incoming data is used. Check this if you want log playback to simulate getting new data",
           default: false
         },
         storeOthers: {
@@ -276,7 +291,26 @@ module.exports = function (app) {
         })
       }
       
-      clientP = skToInflux.influxClientP(options)
+      started = true
+
+      let retryTimeout = 1000
+      function connectToInflux() {
+        if (!started) {
+          clientP = Promise.reject('Not started')
+          //Ignore the rejection, otherwise Node complains
+          clientP.catch(() =>{})
+          return
+        }
+        clientP = influxClientP(options)
+        clientP.catch(err => {
+          console.error(`Error connecting to InfluxDb, retrying in ${retryTimeout} ms`)
+          setTimeout(() => {
+            connectToInflux()
+          }, retryTimeout)
+          retryTimeout *= retryTimeout > 30 * 1000 ? 1 : 2
+        })
+      }
+      connectToInflux()
 
       if ( app.registerHistoryProvider )
         app.registerHistoryProvider(plugin)
@@ -302,24 +336,42 @@ module.exports = function (app) {
           }
         }
       }
-      let deltaToPoints = skToInflux.deltaToPointsConverter(selfContext, options.recordTrack, shouldStore, options.resolution || 200, options.storeOthers)
+      let deltaToPoints = deltaToPointsConverter(selfContext, options.recordTrack, options.separateLatLon, shouldStore, options.resolution || 200, options.storeOthers, !options.overrideTimeWithNow)
+      let accumulatedPoints = []
+      let lastWriteTime = Date.now()
+      let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
       handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {
-          clientP
-          .then(client => {
-            client.writePoints(points)
-          })
-          .catch(logError)
+          accumulatedPoints = accumulatedPoints.concat(points)
+          let now = Date.now()
+          if  ( batchWriteInterval == 0 || now - lastWriteTime > batchWriteInterval ) {
+            lastWriteTime = now
+            clientP
+              .then(client => {
+                const thePoints = accumulatedPoints
+                accumulatedPoints = []
+                return client.writePoints(thePoints)
+              })
+              .catch(error => {
+                logError(error)
+                accumulatedPoints = []
+              })
+          }
         }
       }
       app.signalk.on('delta', handleDelta)
+      const pruneInterval = setInterval(() => {
+        pruneTimestamps(1000 * options.resolution)
+      }, 100 * options.resolution)
       unsubscribes.push(() => {
         app.signalk.removeListener('delta', handleDelta)
+        clearInterval(pruneInterval)
       })
     },
     stop: function () {
       unsubscribes.forEach(f => f())
+      started = false
     },
     signalKApiRoutes: function (router) {
       const trackHandler = function (req, res, next) {
@@ -334,7 +386,8 @@ module.exports = function (app) {
         let query = `
         select first(value) as "position", first(jsonValue) as "jsonPosition"
         from "navigation.position"
-        where time >= now() - ${sanitize(req.query.timespan || '1h')}
+        where context = '${selfContext}'
+        and time >= now() - ${sanitize(req.query.timespan || '1h')}
         group by time(${sanitize(req.query.resolution || '1m')})`
         clientP.then(client => {
           client.query(query)
