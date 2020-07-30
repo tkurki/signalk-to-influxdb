@@ -212,6 +212,14 @@ module.exports = function (app) {
       type: 'object',
       required: ['host', 'port', 'database'],
       properties: {
+        protocol: {
+          type: 'string',
+          enum: [
+            'http',
+            'https'
+          ],
+          default: 'http'
+        },
         host: {
           type: 'string',
           title: 'Host',
@@ -221,6 +229,14 @@ module.exports = function (app) {
           type: 'number',
           title: 'Port',
           default: 8086
+        },
+        username: {
+          type: 'string',
+          title: 'Username (not required if InfluxDb is not authenticated)'
+        },
+        password: {
+          type: 'string',
+          title: 'Password'
         },
         database: {
           type: 'string',

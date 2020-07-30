@@ -143,15 +143,20 @@ module.exports = {
       return points
     }
   },
-  influxClientP: ({ host, port, database }) => {
-    debug(`Attempting connection to ${host}${port} ${database}`)
+  influxClientP: ({ protocol, host, port, database, username, password }) => {
+    debug(`Attempting connection to ${host}${port} ${database} as username ${username ? username : 'n/a'} ${password ? '' : 'no password configured'}`)
     return new Promise((resolve, reject) => {
-      const client = new Influx.InfluxDB({
+      const influxOptions = {
         host: host,
-        port: port, // optional, default 8086
-        protocol: 'http', // optional, default 'http'
+        port: port,
+        protocol: protocol ? protocol : 'http',
         database: database
-      })
+      }
+      if (username) {
+        influxOptions.username = username
+        influxOptions.password = password
+      }
+      const client = new Influx.InfluxDB(influxOptions)
 
       client
         .getDatabaseNames()

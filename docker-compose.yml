@@ -6,6 +6,13 @@ services:
      - "8086:8086"
     volumes:
      - "./data:/data"
+    environment:
+     - INFLUXDB_HTTP_AUTH_ENABLED=true
+     - INFLUXDB_ADMIN_USER=signalk-admin
+     - INFLUXDB_ADMIN_PASSWORD=klangis-nimda
+     - INFLUXDB_USER=signalk
+     - INFLUXDB_USER_PASSWORD=klangis
+     - INFLUXDB_DB=signalk
   grafana:
     image: "grafana/grafana"
     ports:
