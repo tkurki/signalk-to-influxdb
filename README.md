@@ -18,15 +18,31 @@ If enabled by black/whitelist configuration `navigation.position` updates are wr
 The coordinates are written as `[lon, lat]` strings for minimal postprocessing in GeoJSON conversion.
 Optionally, coordinates can be written separately to database. This enable location data to be used in various ways e.g. in Grafana (mapping, functions, ...).
 
-The plugin creates `/signalk/vX/api/self/track` endpoint that accepts two parameters:
-- timespan in the xxxY format, where xxx is a Number and Y one of 
+The plugin creates `/signalk/vX/api/self/track` endpoint that accepts three parameters and returns GeoJSON MultiLineString. 
+
+_Parameters:_
+- __timespan__: in the format xxxY _(e.g. 1h)_, where xxx is a Number and Y one of:
   - s  (seconds)
   - m  (minutes)
   - h  (hours)
   - d  (days)
   - w  (weeks)
-- resolution in the same format
-and returns GeoJSON MultiLineString. For example `http://localhost:3000/signalk/v1/api/self/track?timespan=1d&resolution=1h` will return the data for the last 1 day (24 hours) with one position per hour. The data is simply sampled with InfluxDB's `first()` function.
+
+- __resolution__: (in the same format)
+specifies the time interval between each point returned.
+For example `http://localhost:3000/signalk/v1/api/self/track?timespan=1d&resolution=1h` will return the data for the last 1 day (24 hours) with one position per hour. The data is simply sampled with InfluxDB's `first()` function.
+
+- __offset__: (in the same format) 
+Without an offset defined the end time of the returned data is the current time. Supplying an _offset_ changes the end time to be `current time - offset`. Additionally if the "Y" of  _offset_ is the same as that of _timespan_, the start time will be `current time - (timespan + offset)`
+
+_Examples: where current time is 14:00_
+
+`http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m` returns data in the time window _2:00 - 14:00_
+
+`http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&offset=1h` returns data in the time window _1:00 - 13:00_ as the "Y" value of offset and timespan are the same.
+
+`http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&offset=30m` returns data in the time window _2:00 - 13:30_ as the "Y" value of offset and timespan are different.
+
 
 ### Provider
 

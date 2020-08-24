@@ -374,12 +374,16 @@ module.exports = function (app) {
           return
         }
 
+        let endTime = req.query.offset ? calcEndTime(req.query.offset) : null;
+        let startTime = req.query.offset ? offset(req.query.timespan, req.query.offset) : sanitize(req.query.timespan || '1h');
+
         let query = `
         select first(value) as "position", first(jsonValue) as "jsonPosition"
         from "navigation.position"
         where context = '${selfContext}'
-        and time >= now() - ${sanitize(req.query.timespan || '1h')}
+        and time >= now() - ${startTime} ${endTime ? ' and time <= ' + endTime + ' ' : ''}
         group by time(${sanitize(req.query.resolution || '1m')})`
+        
         clientP.then(client => {
           client.query(query)
           .then(result => {
@@ -478,4 +482,20 @@ function getPathFromOptions(options) {
   } else {
     return null
   }
+}
+
+function offset(influxTime, offsetTime) {
+    let tKey= influxTime.slice(-1);
+    let oKey= offsetTime.slice(-1);
+    if(tKey!= oKey) { return sanitize(influxTime) }
+
+    let oVal= Number(influxTime.substring(0, influxTime.length - 1) ) + Math.abs( Number(offsetTime.substring(0, offsetTime.length - 1) ) ); 
+    return sanitize( oVal + influxDurationKeys[tKey] );
+}
+
+function calcEndTime(tValue) {
+    let oKey= tValue.slice(-1);
+    let oVal= Math.abs( Number(tValue.substring(0, tValue.length - 1) ) ) + 
+        influxDurationKeys[ oKey ]
+    return `now() - ${oVal}`
 }
