@@ -32,16 +32,14 @@ _Parameters:_
 specifies the time interval between each point returned.
 For example `http://localhost:3000/signalk/v1/api/self/track?timespan=1d&resolution=1h` will return the data for the last 1 day (24 hours) with one position per hour. The data is simply sampled with InfluxDB's `first()` function.
 
-- __offset__: (in the same format) 
-Without an offset defined the end time of the returned data is the current time. Supplying an _offset_ changes the end time to be `current time - offset`. Additionally if the "Y" of  _offset_ is the same as that of _timespan_, the start time will be `current time - (timespan + offset)`
+- __timespanOffset__: (number) 
+Without timespanOffset defined the end time of the returned data is the current time. Supplying a _timespanOffset_ value changes the end time to be `current time - timespanOffset`. The _timespanOffset_ value is considered to have the same "Y" as  _timespan_.
 
 _Examples: where current time is 14:00_
 
 `http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m` returns data in the time window _2:00 - 14:00_
 
-`http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&offset=1h` returns data in the time window _1:00 - 13:00_ as the "Y" value of offset and timespan are the same.
-
-`http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&offset=30m` returns data in the time window _2:00 - 13:30_ as the "Y" value of offset and timespan are different.
+`http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&timespanOffset=1` returns data in the time window _1:00 - 13:00_.
 
 
 ### Provider

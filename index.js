@@ -374,8 +374,8 @@ module.exports = function (app) {
           return
         }
 
-        let endTime = req.query.offset ? calcEndTime(req.query.offset) : null;
-        let startTime = req.query.offset ? offset(req.query.timespan, req.query.offset) : sanitize(req.query.timespan || '1h');
+        let endTime = req.query.timespanOffset ? calcEndTime(req.query.timespan, req.query.timespanOffset) : null;
+        let startTime = req.query.timespanOffset ? offset(req.query.timespan, req.query.timespanOffset) : sanitize(req.query.timespan || '1h');
 
         let query = `
         select first(value) as "position", first(jsonValue) as "jsonPosition"
@@ -484,18 +484,20 @@ function getPathFromOptions(options) {
   }
 }
 
+// offet a influxTime value by offsetTime
 function offset(influxTime, offsetTime) {
-    let tKey= influxTime.slice(-1);
-    let oKey= offsetTime.slice(-1);
-    if(tKey!= oKey) { return sanitize(influxTime) }
+    let tKey= influxTime.slice(-1)
+    if(isNaN(offsetTime)) { return sanitize(influxTime) }
 
-    let oVal= Number(influxTime.substring(0, influxTime.length - 1) ) + Math.abs( Number(offsetTime.substring(0, offsetTime.length - 1) ) ); 
-    return sanitize( oVal + influxDurationKeys[tKey] );
+    let oVal= Number(influxTime.substring(0, influxTime.length - 1) ) + Math.abs( Number(offsetTime) )
+    return sanitize( oVal + influxDurationKeys[tKey] )
 }
 
-function calcEndTime(tValue) {
-    let oKey= tValue.slice(-1);
-    let oVal= Math.abs( Number(tValue.substring(0, tValue.length - 1) ) ) + 
-        influxDurationKeys[ oKey ]
-    return `now() - ${oVal}`
+// calculate query end time.
+function calcEndTime(timespanValue, offsetValue) {
+    if(isNaN(offsetValue)) { return null }
+    else {
+        let tKey= timespanValue.slice(-1) // timespan Y value
+        return `now() - ${Math.abs( Number(offsetValue) ) + influxDurationKeys[ tKey ]}`
+    }
 }
