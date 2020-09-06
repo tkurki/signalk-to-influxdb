@@ -484,7 +484,7 @@ function getPathFromOptions(options) {
   }
 }
 
-// offet a influxTime value by offsetTime
+// offset an influxTime value by offsetTime
 function offset(influxTime, offsetTime) {
     let tKey= influxTime.slice(-1)
     if(isNaN(offsetTime)) { return sanitize(influxTime) }
