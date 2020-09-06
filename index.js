@@ -374,7 +374,7 @@ module.exports = function (app) {
           return
         }
 
-        let endTime = req.query.timespanOffset ? calcEndTime(req.query.timespan, req.query.timespanOffset) : null;
+        let endTime = req.query.timespanOffset ? endTimeExpression(req.query.timespan, req.query.timespanOffset) : null;
         let startTime = req.query.timespanOffset ? offset(req.query.timespan, req.query.timespanOffset) : sanitize(req.query.timespan || '1h');
 
         let query = `
@@ -493,8 +493,7 @@ function offset(influxTime, offsetTime) {
     return sanitize( oVal + influxDurationKeys[tKey] )
 }
 
-// calculate query end time.
-function calcEndTime(timespanValue, offsetValue) {
+function endTimeExpression(timespanValue, offsetValue) {
     if(isNaN(offsetValue)) { return null }
     else {
         let tKey= timespanValue.slice(-1) // timespan Y value
