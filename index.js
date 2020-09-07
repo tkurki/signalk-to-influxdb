@@ -390,12 +390,16 @@ module.exports = function (app) {
           return
         }
 
+        let endTime = req.query.timespanOffset ? endTimeExpression(req.query.timespan, req.query.timespanOffset) : null;
+        let startTime = req.query.timespanOffset ? offset(req.query.timespan, req.query.timespanOffset) : sanitize(req.query.timespan || '1h');
+
         let query = `
         select first(value) as "position", first(jsonValue) as "jsonPosition"
         from "navigation.position"
         where context = '${selfContext}'
-        and time >= now() - ${sanitize(req.query.timespan || '1h')}
+        and time >= now() - ${startTime} ${endTime ? ' and time <= ' + endTime + ' ' : ''}
         group by time(${sanitize(req.query.resolution || '1m')})`
+        
         clientP.then(client => {
           client.query(query)
           .then(result => {
@@ -494,4 +498,21 @@ function getPathFromOptions(options) {
   } else {
     return null
   }
+}
+
+// offset an influxTime value by offsetTime
+function offset(influxTime, offsetTime) {
+    let tKey= influxTime.slice(-1)
+    if(isNaN(offsetTime)) { return sanitize(influxTime) }
+
+    let oVal= Number(influxTime.substring(0, influxTime.length - 1) ) + Math.abs( Number(offsetTime) )
+    return sanitize( oVal + influxDurationKeys[tKey] )
+}
+
+function endTimeExpression(timespanValue, offsetValue) {
+    if(isNaN(offsetValue)) { return null }
+    else {
+        let tKey= timespanValue.slice(-1) // timespan Y value
+        return `now() - ${Math.abs( Number(offsetValue) ) + influxDurationKeys[ tKey ]}`
+    }
 }
