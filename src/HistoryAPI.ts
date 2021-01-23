@@ -139,6 +139,7 @@ async function getValues(
   const timeResolutionSeconds = req.query.resolution
     ? Number.parseFloat(req.query.resolution)
     : (to.toEpochSecond() - from.toEpochSecond()) / 500;
+
   const context = getContext(req.query.context, selfId);
   debug(context)
   const pathExpressions = (req.query.paths || "")

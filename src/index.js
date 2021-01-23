@@ -321,8 +321,9 @@ module.exports = function (app) {
       }
       connectToInflux()
 
-      if ( app.registerHistoryProvider )
+      if ( app.registerHistoryProvider ) {
         app.registerHistoryProvider(plugin)
+      }
 
       if (
         typeof options.blackOrWhitelist !== 'undefined' &&
@@ -420,6 +421,7 @@ module.exports = function (app) {
       router.get('/self/track', trackHandler)
       router.get('/vessels/self/track', trackHandler)
       router.get('/vessels/' + app.selfId + '/track', trackHandler)
+
       return router
     },
 
