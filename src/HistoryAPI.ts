@@ -177,10 +177,9 @@ async function getValues(
 }
 
 function getContext(contextFromQuery: string, selfId: string) {
-  if (!contextFromQuery || true || contextFromQuery === 'vessels.self' || contextFromQuery === 'self') {
+  if (!contextFromQuery || contextFromQuery === 'vessels.self' || contextFromQuery === 'self') {
     return `vessels.${selfId}`
   }
-  //TODO improve sanitize 
   return contextFromQuery.replace(/ /gi, '')
 }
 
