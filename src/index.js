@@ -377,6 +377,8 @@ module.exports = function (app) {
         app.signalk.removeListener('delta', handleDelta)
         clearInterval(pruneInterval)
       })
+
+      registerHistoryApiRoute(app, clientP, app.selfId)
     },
     stop: function () {
       unsubscribes.forEach(f => f())
@@ -473,9 +475,6 @@ module.exports = function (app) {
       })
     },
 
-    registerHistoryApiRoute: (router) => {
-      registerHistoryApiRoute(router, clientP, app.selfId)
-    }
   }
   return plugin
 }

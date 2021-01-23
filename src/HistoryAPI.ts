@@ -15,7 +15,7 @@ const valuesDebug = Debug("influxdb:history:values");
 
 export function registerHistoryApiRoute(router: Router, influx: InfluxDB, selfId: string) {
   router.get(
-    "/values",
+    "/signalk/v1/history/values",
     asyncHandler(
       fromToHandler(
         (...args) => getValues.apply(this, [influx, selfId, ...args]),
