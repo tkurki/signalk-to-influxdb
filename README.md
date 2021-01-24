@@ -60,7 +60,8 @@ include in your input pipeline. First configure your log playback, then stop the
         }
 ```
 
-### Try it out
+### Try it out / Development setup
 
-You can start a local InfluxDb & Grafana with `docker-compose up` and then configure the plugin to write to
-localhost:8086 and then configure [Grafana](http://localhost:3001/) to use InfluxDb data. 
+A quick way to get started / try things out / set things up for development is to start InfluxDb and Grafana with`docker-compose up`. Then you need to configure the plugin to write to localhost:8086 and [Grafana](http://localhost:3001/) to use InfluxDb data.
+
+For a real world setup you probably want to install these locally.
