@@ -64,4 +64,4 @@ include in your input pipeline. First configure your log playback, then stop the
 
 A quick way to get started / try things out / set things up for development is to start InfluxDb and Grafana with`docker-compose up`. Then you need to configure the plugin to write to localhost:8086 and [Grafana](http://localhost:3001/) to use InfluxDb data.
 
-For a real world setup you probably want to install these locally.
+For a real world setup you probably want to install these locally, see for example [Seabits step by step instructions](https://seabits.com/set-up-signal-k-and-grafana-on-raspberry-pi-with-pican-m-nmea-2000-board/).
