@@ -280,9 +280,9 @@ module.exports = function (app) {
           type: 'string',
           title: 'Type of List',
           description:
-            'With a blacklist, all numeric values except the ones in the list below will be stored in InfluxDB. With a whitelist, only the values in the list below will be stored.',
-          default: 'Black',
-          enum: ['White', 'Black']
+            'With a blocklist, all numeric values except the ones in the list below will be stored in InfluxDB. With an allowlist, only the values in the list below will be stored.',
+          default: 'Allow',
+          enum: ['Allow', 'Block']
         },
         blackOrWhitelist: {
           title: 'SignalK Paths',
@@ -298,6 +298,15 @@ module.exports = function (app) {
     },
 
     start: function (options) {
+      if ( options.blackOrWhite === 'Black'
+           || options.blackOrWhite === 'White' ) {
+        options.blackOrWhite = options.blackOrWhite === 'Black' ? 'Block' : 'Allow'
+        app.savePluginOptions(options, (err) => {
+          app.setProviderError('unable to save config')
+          console.error(err)
+        })
+      }
+      
       started = true
 
       let retryTimeout = 1000
@@ -333,7 +342,7 @@ module.exports = function (app) {
           obj[element] = true
         })
 
-        if (options.blackOrWhite == 'White') {
+        if (options.blackOrWhite == 'White' || options.blackOrWhite == 'Allow') {
           shouldStore = function (path) {
             return typeof obj[path] !== 'undefined'
           }
