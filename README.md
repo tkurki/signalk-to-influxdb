@@ -42,6 +42,15 @@ _Examples: where current time is 14:00_
 `http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&timespanOffset=1` returns data in the time window _1:00 - 13:00_.
 
 
+### Time Series API
+
+This plugin implements an HTTP API for retrieving historical / time series values with urls like http://localhost:3000/signalk/v1/history/values?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z&paths=navigation.speedOverGround,navigation.speedOverGround
+
+- `from` and `to` are date-times with a time offset and/or a time zone in the ISO-8601 calendar system
+- `paths` is a comma delimited list of Signal K paths
+- `resolution`
+- `context`
+
 ### Provider
 
 If you want to import log files to InfluxDb this plugin provides also a provider interface that you can
