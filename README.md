@@ -1,5 +1,5 @@
 # Signal K to InfluxDb Plugin
-Signal K Node server plugin to write all simple numeric Signal K values to [InfluxDB](https://www.influxdata.com/time-series-platform/influxdb/), a time series database.
+Signal K Node server plugin to write all simple numeric Signal K values to [InfluxDB 1.x](https://docs.influxdata.com/influxdb/v1.8/), a time series database.
 
 Once the data is in InfluxDb you can use for example [Grafana](http://grafana.org/) to draw pretty graphs of your data.
 
