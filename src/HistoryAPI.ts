@@ -36,29 +36,6 @@ export function registerHistoryApiRoute(router: Router, influx: InfluxDB, selfId
 //   );
 // }
 
-// const influx = new InfluxDB({
-//   host: "localhost",
-//   port: 8086,
-//   database: "signalk"
-// });
-// const _getValues = (...args) => {
-//   console.log(args);
-//   console.log([influx, args]);
-//   return getValues.apply(this, [influx, ...args]);
-// };
-
-// _getValues(
-//   ZonedDateTime.parse("2020-01-18T00:08:01Z"),
-//   ZonedDateTime.parse("2020-07-01T00:00:02Z"),
-//   valuesDebug,
-//   {
-//     query: {
-//       resolution: 1000,
-//       paths: "navigation.speedOverGround,environment.depth.belowTransducer"
-//     }
-//   }
-// ).then(d => console.log(JSON.stringify(d, null, 2)));
-
 // type ContextResultRow = [string];
 // async function getContexts(
 //   influx: InfluxDB,
