@@ -19,6 +19,7 @@
     "influx": "^5.0.7"
   },
   "devDependencies": {
+    "@types/node": "^15.6.1",
     "express": "^4.17.1",
     "js-joda": "^1.11.0",
     "prettier-standard": "^6.0.0",
