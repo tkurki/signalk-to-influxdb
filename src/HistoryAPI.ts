@@ -36,14 +36,16 @@ export function registerHistoryApiRoute(
       )
     )
   );
+  router.get(
+    "/signalk/v1/history/paths",
+    asyncHandler(
+      fromToHandler(
+        (...args) => getPaths.apply(this, [influx, selfId, ...args]),
+        pathsDebug
+      )
+    )
+  );
 }
-
-// export default function setupHistoryAPIRoutes(app: Express) {
-//   app.get(
-//     "/signalk/v1/history/paths",
-//     asyncHandler(fromToHandler(getPaths, pathsDebug))
-//   );
-// }
 
 async function getContexts(
   influx: Promise<InfluxDB>,
@@ -52,35 +54,23 @@ async function getContexts(
   debug: (s: string) => void
 ): Promise<string[]> {
   return influx
-    .then((i) => i.query('SHOW TAG VALUES FROM "navigation.position" WITH KEY = "context"'))
-    .then((x:any) => x.map(x => x.value))
+    .then((i) =>
+      i.query('SHOW TAG VALUES FROM "navigation.position" WITH KEY = "context"')
+    )
+    .then((x: any) => x.map((x) => x.value));
 }
 
-// type PathsResultRow = [string];
-// async function getPaths(
-//   influx: InfluxDB,
-//   from: ZonedDateTime,
-//   to: ZonedDateTime,
-//   debug: (s: string) => void,
-//   req: Request
-// ) {
-//   const context = req.query.context || "";
-//   const query = `
-//       SELECT
-//         DISTINCT path
-//       FROM value
-//       WHERE
-//         context = '${context}'
-//         AND
-//         ts >= ${from.toEpochSecond()}
-//         AND
-//         ts <= ${to.toEpochSecond()}
-//     `;
-//   debug(query);
-//   return ch
-//     .querying<PathsResultRow>(query)
-//     .then((result: any) => result.data.map((row: any[]) => row[0]));
-// }
+async function getPaths(
+  influx: Promise<InfluxDB>,
+  from: ZonedDateTime,
+  to: ZonedDateTime,
+  debug: (s: string) => void,
+  req: Request
+) :Promise<string[]> {
+  const query = `SHOW MEASUREMENTS`;
+  console.log(query);
+  return influx.then((i) => i.query(query)).then((d) => d.map((r:any) => r.name));
+}
 
 interface ValuesResult {
   context: string;
@@ -191,22 +181,6 @@ const toDataRows = <
       });
   });
   return resultRows;
-
-  // let lastRow: any;
-  // let lastTimestamp = "";
-  // return data.reduce((acc: any, valueRow: any[]) => {
-  //   const pathIndex = paths.indexOf(valueRow[1]) + 1;
-  //   if (valueRow[0] !== lastTimestamp) {
-  //     if (lastRow) {
-  //       acc.push(lastRow);
-  //     }
-  //     lastTimestamp = valueRow[0];
-  //     // tslint:disable-next-line: radix
-  //     lastRow = [new Date(Number.parseInt(lastTimestamp) * 1000)];
-  //   }
-  //   lastRow[pathIndex] = valueRow[2];
-  //   return acc;
-  // }, []);
 };
 
 interface PathSpec {
