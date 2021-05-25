@@ -51,6 +51,10 @@ This plugin implements an HTTP API for retrieving historical / time series value
 - `resolution`
 - `context`
 
+Additionally you can retrieve the contexts that the db has data for with query like 
+http://localhost:3000/signalk/v1/history/contexts?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z and paths with 
+http://localhost:3000/signalk/v1/history/paths?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z
+
 ### Provider
 
 If you want to import log files to InfluxDb this plugin provides also a provider interface that you can
