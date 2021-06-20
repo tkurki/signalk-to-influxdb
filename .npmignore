@@ -1,0 +1,4 @@
+node_modules
+src
+docker-compose.yml
+tsconfig.json
