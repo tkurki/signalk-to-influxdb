@@ -5,7 +5,8 @@
   "main": "built/index.js",
   "scripts": {
     "format": "prettier-standard '*.js*'",
-    "build": "tsc"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "repository": "https://github.com/tkurki/signalk-to-influxdb",
   "keywords": [
