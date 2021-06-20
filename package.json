@@ -16,10 +16,10 @@
   "author": "Teppo Kurki <teppo.kurki@iki.fi>",
   "license": "ISC",
   "dependencies": {
+    "@js-joda/core": "^3.2.0",
     "@signalk/signalk-schema": "^1.0.3",
     "debug": "^2.2.0",
-    "influx": "^5.0.7",
-    "js-joda": "^1.11.0"
+    "influx": "^5.0.7"
   },
   "devDependencies": {
     "@types/node": "^15.6.1",
