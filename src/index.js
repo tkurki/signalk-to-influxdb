@@ -15,6 +15,8 @@
 
 const { deltaToPointsConverter, influxClientP, pruneTimestamps } = require('./skToInflux')
 
+import {registerHistoryApiRoute} from './HistoryAPI'
+
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
   let clientP
@@ -319,8 +321,9 @@ module.exports = function (app) {
       }
       connectToInflux()
 
-      if ( app.registerHistoryProvider )
+      if ( app.registerHistoryProvider ) {
         app.registerHistoryProvider(plugin)
+      }
 
       if (
         typeof options.blackOrWhitelist !== 'undefined' &&
@@ -347,7 +350,7 @@ module.exports = function (app) {
       let accumulatedPoints = []
       let lastWriteTime = Date.now()
       let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
-      handleDelta = delta => {
+      const handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {
           accumulatedPoints = accumulatedPoints.concat(points)
@@ -375,6 +378,8 @@ module.exports = function (app) {
         app.signalk.removeListener('delta', handleDelta)
         clearInterval(pruneInterval)
       })
+
+      registerHistoryApiRoute(app, clientP, app.selfId)
     },
     stop: function () {
       unsubscribes.forEach(f => f())
@@ -416,6 +421,7 @@ module.exports = function (app) {
       router.get('/self/track', trackHandler)
       router.get('/vessels/self/track', trackHandler)
       router.get('/vessels/' + app.selfId + '/track', trackHandler)
+
       return router
     },
 
@@ -469,7 +475,8 @@ module.exports = function (app) {
       getHistory(startTime, date, pathElements, (deltas) => {
         cb(deltas)
       })
-    }
+    },
+
   }
   return plugin
 }

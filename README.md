@@ -1,5 +1,5 @@
 # Signal K to InfluxDb Plugin
-Signal K Node server plugin to write all simple numeric Signal K values to [InfluxDB](https://www.influxdata.com/time-series-platform/influxdb/), a time series database.
+Signal K Node server plugin to write all simple numeric Signal K values to [InfluxDB 1.x](https://docs.influxdata.com/influxdb/v1.8/), a time series database.
 
 Once the data is in InfluxDb you can use for example [Grafana](http://grafana.org/) to draw pretty graphs of your data.
 
@@ -41,6 +41,19 @@ _Examples: where current time is 14:00_
 
 `http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&timespanOffset=1` returns data in the time window _1:00 - 13:00_.
 
+
+### Time Series API
+
+This plugin implements an HTTP API for retrieving historical / time series values with urls like http://localhost:3000/signalk/v1/history/values?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z&paths=navigation.speedOverGround,navigation.speedOverGround
+
+- `from` and `to` are date-times with a time offset and/or a time zone in the ISO-8601 calendar system
+- `paths` is a comma delimited list of Signal K paths
+- `resolution`
+- `context`
+
+Additionally you can retrieve the contexts that the db has data for with query like 
+http://localhost:3000/signalk/v1/history/contexts?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z and paths with 
+http://localhost:3000/signalk/v1/history/paths?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z
 
 ### Provider
 

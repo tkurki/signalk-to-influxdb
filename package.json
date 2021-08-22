@@ -1,10 +1,12 @@
 {
   "name": "signalk-to-influxdb",
   "version": "1.8.0",
-  "description": "Signal K server plugin to send all numeric values & positions to InfluxDb",
-  "main": "index.js",
+  "description": "Signal K server plugin to send all numeric values & positions to InfluxDb 1.x",
+  "main": "built/index.js",
   "scripts": {
-    "format": "prettier-standard '*.js*'"
+    "format": "prettier-standard '*.js*'",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "repository": "https://github.com/tkurki/signalk-to-influxdb",
   "keywords": [
@@ -14,11 +16,15 @@
   "author": "Teppo Kurki <teppo.kurki@iki.fi>",
   "license": "ISC",
   "dependencies": {
+    "@js-joda/core": "^3.2.0",
     "@signalk/signalk-schema": "^1.0.3",
     "debug": "^2.2.0",
     "influx": "^5.0.7"
   },
   "devDependencies": {
-    "prettier-standard": "^6.0.0"
+    "@types/node": "^15.6.1",
+    "express": "^4.17.1",
+    "prettier-standard": "^6.0.0",
+    "typescript": "^3.7.5"
   }
 }
