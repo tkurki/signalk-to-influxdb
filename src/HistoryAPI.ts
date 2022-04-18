@@ -66,10 +66,12 @@ async function getPaths(
   to: ZonedDateTime,
   debug: (s: string) => void,
   req: Request
-) :Promise<string[]> {
+): Promise<string[]> {
   const query = `SHOW MEASUREMENTS`;
   console.log(query);
-  return influx.then((i) => i.query(query)).then((d) => d.map((r:any) => r.name));
+  return influx
+    .then((i) => i.query(query))
+    .then((d) => d.map((r: any) => r.name));
 }
 
 interface ValuesResult {
