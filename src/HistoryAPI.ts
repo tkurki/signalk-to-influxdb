@@ -1,4 +1,4 @@
-import { ZonedDateTime } from "@js-joda/core";
+import { DateTimeFormatter, ZonedDateTime } from "@js-joda/core";
 import Debug from "debug";
 
 import {
@@ -116,7 +116,9 @@ async function getValues(
       WHERE
         "context" = '${context}'
         AND
-        time > '${from.toString()}' and time <= '${to.toString()}'
+        time > '${from.format(
+          DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        )}Z' and time <= '${to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)}Z'
       GROUP BY
         time(${Number(timeResolutionSeconds * 1000).toFixed(0)}ms)`
     )
