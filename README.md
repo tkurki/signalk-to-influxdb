@@ -41,6 +41,13 @@ _Examples: where current time is 14:00_
 
 `http://localhost:3000/signalk/v1/api/self/track?timespan=12h&resolution=1m&timespanOffset=1` returns data in the time window _1:00 - 13:00_.
 
+### Sources
+
+If you have multiple sources generating the same data / same Signal K paths you can distinguish between them by specifying `source` in the query:
+
+<img width="635" alt="image" src="https://user-images.githubusercontent.com/1049678/174805296-f15929be-b215-401a-8a95-d45b8c20fdb9.png">
+
+To get persistent source data in data from NMEA 2000 networks use `Use Can NAME in source data` in connection settings. This way all sources will get a unique identity that does not change the NMEA 2000 bus addresses change.
 
 ### Time Series API
 
