@@ -1,5 +1,5 @@
 import { DateTimeFormatter, ZonedDateTime } from "@js-joda/core";
-import Debug from "debug";
+//import Debug from "debug";
 
 import {
   NextFunction,
@@ -9,21 +9,19 @@ import {
   Router,
 } from "express";
 import { InfluxDB, IResults } from "influx";
-const contextsDebug = Debug("influxdb:history:contexts");
-const pathsDebug = Debug("influxdb:history:paths");
-const valuesDebug = Debug("influxdb:history:values");
 
 export function registerHistoryApiRoute(
   router: Router,
   influx: InfluxDB,
-  selfId: string
+  selfId: string,
+  debug: (any) => void
 ) {
   router.get(
     "/signalk/v1/history/values",
     asyncHandler(
       fromToHandler(
         (...args) => getValues.apply(this, [influx, selfId, ...args]),
-        valuesDebug
+        debug
       )
     )
   );
@@ -32,7 +30,7 @@ export function registerHistoryApiRoute(
     asyncHandler(
       fromToHandler(
         (...args) => getContexts.apply(this, [influx, selfId, ...args]),
-        contextsDebug
+        debug
       )
     )
   );
@@ -41,7 +39,7 @@ export function registerHistoryApiRoute(
     asyncHandler(
       fromToHandler(
         (...args) => getPaths.apply(this, [influx, selfId, ...args]),
-        pathsDebug
+        debug
       )
     )
   );
@@ -241,7 +239,7 @@ function fromToHandler(
     debug(req.query);
     const from = dateTimeFromQuery(req, "from");
     const to = dateTimeFromQuery(req, "to");
-    contextsDebug(`${from.toString()}-${to.toString()}`);
+    debug(`${from.toString()}-${to.toString()}`);
     res.json(await wrappedHandler(from, to, debug, req));
   };
 }
