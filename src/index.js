@@ -379,7 +379,7 @@ module.exports = function (app) {
         clearInterval(pruneInterval)
       })
 
-      registerHistoryApiRoute(app, clientP, app.selfId)
+      registerHistoryApiRoute(app, clientP, app.selfId, app.debug)
     },
     stop: function () {
       unsubscribes.forEach(f => f())
