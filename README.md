@@ -55,7 +55,7 @@ This plugin implements an HTTP API for retrieving historical / time series value
 
 - `from` and `to` are date-times with a time offset and/or a time zone in the ISO-8601 calendar system
 - `paths` is a comma delimited list of Signal K paths
-- `resolution`
+- `resolution` is how many seconds between entries, given as integer
 - `context`
 
 Additionally you can retrieve the contexts that the db has data for with query like 
