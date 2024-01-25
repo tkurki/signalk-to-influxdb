@@ -1,6 +1,6 @@
 {
   "name": "signalk-to-influxdb",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Signal K server plugin to send all numeric values & positions to InfluxDb 1.x",
   "main": "built/index.js",
   "scripts": {
