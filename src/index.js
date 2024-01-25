@@ -47,9 +47,11 @@ module.exports = function (app) {
           position = [ position.longitude, position.latitude ]
         }
         
-        currentLine[currentLine.length] = position
-        if (currentLine.length === 1) {
-          result.coordinates[result.coordinates.length] = currentLine
+        if (position[0] !== 0 && position[1] !== 0) {
+          currentLine[currentLine.length] = position
+          if (currentLine.length === 1) {
+            result.coordinates[result.coordinates.length] = currentLine
+          }
         }
       }
     })
