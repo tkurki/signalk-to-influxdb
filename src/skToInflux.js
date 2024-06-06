@@ -19,6 +19,7 @@ const { getSourceId } = require('@signalk/signalk-schema')
 
 var lastUpdates = {}
 var lastPositionStored = {}
+var recordTrackEnabled = false
 
 function addSource(update, tags) {
   if (update['$source']) {
@@ -39,6 +40,7 @@ module.exports = {
     storeOthers,
     honorDeltaTimestamp = true
   ) => {
+    recordTrackEnabled = recordTrack
     return delta => {
 
       if (delta.context === 'vessels.self') {
@@ -55,7 +57,7 @@ module.exports = {
             update.values.reduce((acc, pathValue) => {
 
               if (pathValue.path === 'navigation.position') {
-                if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
+                if (recordTrackEnabled && shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
                     measurement: pathValue.path,
                     tags: tags,
@@ -179,6 +181,9 @@ module.exports = {
   pruneTimestamps(maxAge) {
     clearContextTimestamps(lastUpdates, maxAge)
     clearContextTimestamps(lastPositionStored, maxAge)
+  },
+  enableRecordTrack(enabled) {
+    recordTrackEnabled = enabled
   }
 }
 

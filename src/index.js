@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-const { deltaToPointsConverter, influxClientP, pruneTimestamps } = require('./skToInflux')
+const { deltaToPointsConverter, influxClientP, pruneTimestamps, enableRecordTrack } = require('./skToInflux')
 
 import {registerHistoryApiRoute} from './HistoryAPI'
 
@@ -381,6 +381,20 @@ module.exports = function (app) {
         clearInterval(pruneInterval)
       })
 
+      sendEnableRecordTrack(app, options.recordTrack)
+      app.registerPutHandler(
+        'vessels.self',
+        'navigation.trackRecordingEnabled.state',
+        (context, path, value, cb) => {
+          enableRecordTrack(value ? true : false)
+          sendEnableRecordTrack(app, value)
+          return {
+            state: 'SUCCESS',
+            statusCode: 200
+          }
+        }
+      )
+
       registerHistoryApiRoute(app, clientP, app.selfId, app.debug)
     },
     stop: function () {
@@ -524,4 +538,21 @@ function endTimeExpression(timespanValue, offsetValue) {
         let tKey= timespanValue.slice(-1) // timespan Y value
         return `now() - ${Math.abs( Number(offsetValue) ) + influxDurationKeys[ tKey ]}`
     }
+}
+
+function sendEnableRecordTrack(app, value)
+{
+  let delta = {
+    updates: [
+      {
+        values: [
+          {
+            path: 'navigation.trackRecordingEnabled.state',
+            value: value ? 1 : 0
+          }
+        ]
+      }
+    ]
+  }
+  app.handleMessage('signalk-to-influxdb', delta);
 }
