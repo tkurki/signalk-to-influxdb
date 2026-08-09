@@ -15,7 +15,7 @@
 
 const { deltaToPointsConverter, influxClientP, pruneTimestamps } = require('./skToInflux')
 
-import {registerHistoryApiRoute} from './HistoryAPI'
+import { InfluxHistoryProvider } from './HistoryAPI'
 
 module.exports = function (app) {
   const logError = app.error || ((err) => {console.error(err)})
@@ -381,7 +381,11 @@ module.exports = function (app) {
         clearInterval(pruneInterval)
       })
 
-      registerHistoryApiRoute(app, clientP, app.selfId, app.debug)
+      if (app.registerHistoryApiProvider) {
+        app.registerHistoryApiProvider(
+          new InfluxHistoryProvider(clientP, app.selfId, app.debug)
+        )
+      }
     },
     stop: function () {
       unsubscribes.forEach(f => f())
