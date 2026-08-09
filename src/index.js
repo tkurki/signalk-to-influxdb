@@ -212,6 +212,11 @@ module.exports = function (app) {
     name: 'InfluxDb writer',
     description: 'Signal K server plugin that writes self values to InfluxDb',
 
+    lastWriteTime: 0,
+    totalPointsWritten: 0,
+    throughputStartTime: 0,
+    throughputPoints: 0,
+
     schema: {
       type: 'object',
       required: ['host', 'port', 'database'],
@@ -312,9 +317,19 @@ module.exports = function (app) {
           clientP.catch(() =>{})
           return
         }
+        if (app.setPluginStatus) {
+          app.setPluginStatus(`Connecting to InfluxDB at ${options.protocol}://${options.host}:${options.port}/${options.database}`)
+        }
         clientP = influxClientP(options)
-        clientP.catch(err => {
+        clientP.then(() => {
+          if (app.setPluginStatus) {
+            app.setPluginStatus(`Connected to InfluxDB at ${options.protocol}://${options.host}:${options.port}/${options.database}`)
+          }
+        }).catch(err => {
           console.error(`Error connecting to InfluxDb, retrying in ${retryTimeout} ms`)
+          if (app.setPluginStatus) {
+            app.setPluginStatus(`Error connecting to InfluxDB: ${err.message} (retrying in ${retryTimeout/1000}s)`)
+          }
           setTimeout(() => {
             connectToInflux()
           }, retryTimeout)
@@ -352,6 +367,8 @@ module.exports = function (app) {
       let accumulatedPoints = []
       let lastWriteTime = Date.now()
       let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
+      plugin.throughputStartTime = Date.now()
+      plugin.throughputPoints = 0
       const handleDelta = delta => {
         const points = deltaToPoints(delta)
         if (points.length > 0) {
@@ -363,10 +380,33 @@ module.exports = function (app) {
               .then(client => {
                 const thePoints = accumulatedPoints
                 accumulatedPoints = []
+                plugin.totalPointsWritten += thePoints.length
+                plugin.throughputPoints += thePoints.length
+                plugin.lastWriteTime = Date.now()
+                
+                // Calculate throughput over last minute
+                const elapsedSeconds = (Date.now() - plugin.throughputStartTime) / 1000
+                let throughput = 0
+                if (elapsedSeconds > 0) {
+                  throughput = Math.round(plugin.throughputPoints / elapsedSeconds)
+                }
+                
+                // Reset throughput counters every minute
+                if (elapsedSeconds >= 60) {
+                  plugin.throughputStartTime = Date.now()
+                  plugin.throughputPoints = 0
+                }
+                
+                if (app.setPluginStatus) {
+                  app.setPluginStatus(`Connected to ${options.protocol}://${options.host}:${options.port}/${options.database}. Writing ~${throughput} pts/s. Last: ${thePoints.length} pts (${plugin.totalPointsWritten} total)`)
+                }
                 return client.writePoints(thePoints)
               })
               .catch(error => {
                 logError(error)
+                if (app.setPluginStatus) {
+                  app.setPluginStatus(`Error writing to InfluxDB: ${error.message}`)
+                }
                 accumulatedPoints = []
               })
           }
@@ -390,6 +430,9 @@ module.exports = function (app) {
     stop: function () {
       unsubscribes.forEach(f => f())
       started = false
+      if (app.setPluginStatus) {
+        app.setPluginStatus('Stopped')
+      }
     },
     signalKApiRoutes: function (router) {
       const trackHandler = function (req, res, next) {
