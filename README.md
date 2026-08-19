@@ -9,9 +9,7 @@ The plugin assumes that the database you specify exists. You can create one with
 
 `curl -X POST http://localhost:8086/query?q=CREATE+DATABASE+boatdata`
 
-The plugin writes only `self` data. It converts Signal K paths to InfluxDb `measurement` keys in CamelCase format, eg. `navigationPosition`.
-
-Adding support for non-self data would be pretty easy by adding context as InfluxDB tags.
+The plugin writes only `self` data. Each Signal K path is stored as its own InfluxDb measurement under the raw path name, eg. `navigation.speedOverGround`, so it can be queried directly by the History API. Adding support for non-self data would be pretty easy by adding context as InfluxDB tags.
 
 ### Position handling and tracks
 
@@ -51,18 +49,63 @@ If you have multiple sources generating the same data / same Signal K paths you 
 
 To get persistent source data in data from NMEA 2000 networks use `Use Can NAME in source data` in connection settings. This way all sources will get a unique identity that does not change the NMEA 2000 bus addresses change.
 
-### Time Series API
+### History API
 
-This plugin implements an HTTP API for retrieving historical / time series values with urls like http://localhost:3000/signalk/v1/history/values?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z&paths=navigation.speedOverGround,navigation.speedOverGround
+This plugin implements the Signal K [History API](https://signalk.org/specification/2.0.0/doc/history.html) as a history provider, so the server serves the standard endpoints under `/signalk/v2/api/history/*`:
 
-- `from` and `to` are date-times with a time offset and/or a time zone in the ISO-8601 calendar system
-- `paths` is a comma delimited list of Signal K paths
-- `resolution` is how many seconds between entries, given as integer
-- `context`
+- `GET /signalk/v2/api/history/values` — retrieve historical data series
+- `GET /signalk/v2/api/history/contexts` — contexts that have data
+- `GET /signalk/v2/api/history/paths` — paths that have data
+- `GET /signalk/v2/api/history/_providers` — registered providers
 
-Additionally you can retrieve the contexts that the db has data for with query like 
-http://localhost:3000/signalk/v1/history/contexts?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z and paths with 
-http://localhost:3000/signalk/v1/history/paths?from=2021-05-25T20:00:00.001Z&to=2021-05-25T23:00:00.561Z
+Example:
+
+```
+GET /signalk/v2/api/history/values?from=2026-08-07T04:53:55Z&duration=PT24H&paths=navigation.speedOverGround:average,navigation.position&resolution=60
+```
+
+a few more:
+
+```
+# last 15 minutes (duration relative to now), max speed per 1-minute bucket
+GET /signalk/v2/api/history/values?duration=PT15M&paths=navigation.speedOverGround:max&resolution=1m
+
+# simple moving average over 5 samples, filtered to one source
+GET /signalk/v2/api/history/values?from=2026-08-08T00:00:00Z&to=2026-08-08T06:00:00Z&paths=navigation.speedOverGround:sma:5|n2k-on-ve.can0.115
+
+# which contexts / paths have data in the range
+GET /signalk/v2/api/history/contexts?from=2026-08-01T00:00:00Z&to=2026-08-08T00:00:00Z
+GET /signalk/v2/api/history/paths?duration=P7D
+
+# list registered history providers
+GET /signalk/v2/api/history/_providers
+```
+
+The `/values` response shape (timestamps first, then one value per requested path; `null` where a path has no data in that bucket):
+
+```json
+{
+  "context": "vessels.urn:mrn:imo:mmsi:230099999",
+  "range": { "from": "2026-08-07T04:53:55Z", "to": "2026-08-08T04:53:55Z" },
+  "values": [
+    { "path": "navigation.speedOverGround", "method": "average" },
+    { "path": "navigation.position", "method": "first" }
+  ],
+  "data": [
+    ["2026-08-07T04:53:55.000Z", 5.4, [21.1, 60.2]],
+    ["2026-08-07T04:54:55.000Z", null, [21.2, 60.3]]
+  ]
+}
+```
+
+Query parameters for `/values`:
+
+- **paths** (required): comma separated list of Signal K paths, with an optional aggregation method as a postfix separated by a colon, and an optional source reference separated by a pipe (`|`). Aggregation methods: `average` | `min` | `max` | `first` | `last` | `sma` | `ema`. `sma` accepts the number of samples and `ema` the alpha value (0–1) as a further colon-separated parameter, e.g. `navigation.speedOverGround:sma:5` or `navigation.speedOverGround:ema:0.2|n2k-on-ve.can0.115`.
+- **from** / **to**: start and end of the time range as ISO 8601 timestamps (inclusive). Omitted `to` defaults to now.
+- **duration**: length of the time range as an integer number of seconds or an ISO 8601 duration string (`PT15M`). Can be combined with either `from` or `to`; when given alone it is relative to now.
+- **resolution**: sample window as seconds or a time expression (`1s`, `1m`, `1h`, `1d`). Defaults to a sensible value for the range.
+- **context**: Signal K context, defaults to `vessels.self`.
+- **provider**: direct the request to a specific history provider plugin.
 
 ### Provider
 
