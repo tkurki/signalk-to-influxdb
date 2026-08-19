@@ -7,7 +7,7 @@ Once the data is in InfluxDb you can use for example [Grafana](http://grafana.or
 
 The plugin assumes that the database you specify exists. You can create one with
 
-`curl -X POST http://localhost:8086/query?q=CREATE+DATABASE+boatdata`
+`curl -X POST http://localhost:8086/query?q=CREATE+DATABASE+signalk`
 
 The plugin writes only `self` data. Each Signal K path is stored as its own InfluxDb measurement under the raw path name, eg. `navigation.speedOverGround`, so it can be queried directly by the History API. Adding support for non-self data would be pretty easy by adding context as InfluxDB tags.
 
