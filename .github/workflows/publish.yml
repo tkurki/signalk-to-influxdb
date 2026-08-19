@@ -6,6 +6,9 @@ on:
 
 jobs:
   build:
+    permissions:
+      id-token: write
+      contents: read
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -14,6 +17,4 @@ jobs:
         node-version: '24.x'
         registry-url: 'https://registry.npmjs.org'
     - run: npm install
-    - run: npm publish --access public
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    - run: npm publish --provenance --access public
