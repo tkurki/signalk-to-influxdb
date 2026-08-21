@@ -12,6 +12,7 @@
   "repository": "https://github.com/tkurki/signalk-to-influxdb",
   "keywords": [
     "signalk-node-server-plugin",
+    "signalk-category-database",
     "signalk-webapp"
   ],
   "author": "Teppo Kurki <teppo.kurki@iki.fi>",
