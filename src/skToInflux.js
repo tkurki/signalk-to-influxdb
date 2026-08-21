@@ -92,6 +92,11 @@ module.exports = {
                   lastPositionStored[delta.context][tags.source] = time
                 }
               } else {
+                if (requiresObjectValue(pathValue.path) &&
+                  (pathValue.value === null || typeof pathValue.value !== 'object')) {
+                  return acc
+                }
+
                 const pathAndSource = `${pathValue.path}-${tags.source}`
                 if (shouldStore(pathValue.path) &&
                   (pathValue.path == '' || shouldStoreNow(delta, pathAndSource, time, resolution))
@@ -131,11 +136,9 @@ module.exports = {
                     }
 
                     if (pathValue.path === '') {
-                      if (pathValue.value !== null && typeof pathValue.value === 'object') {
-                        Object.keys(pathValue.value).forEach(key => {
-                          addPoint(key, pathValue.value[key])
-                        })
-                      }
+                      Object.keys(pathValue.value).forEach(key => {
+                        addPoint(key, pathValue.value[key])
+                      })
                     } else {
                       addPoint(pathValue.path, pathValue.value)
                     }
@@ -200,6 +203,12 @@ function clearContextTimestamps(holder, maxAge) {
   })
 }
 
+// Paths whose value is dereferenced as an object when storing points, so a
+// null or primitive value has nothing to store.
+function requiresObjectValue(path) {
+  return path === '' || path === 'navigation.attitude'
+}
+
 function isValidPosition(value) {
   return (
     value !== null &&
@@ -226,10 +235,7 @@ function shouldStoreNow(delta, pathAndSource, time, resolution) {
 
 
 function storeAttitude(date, pathValue, tags, acc) {
-  if (pathValue.value === null || typeof pathValue.value !== 'object') {
-    return
-  }
-  ;['pitch', 'roll', 'yaw'].forEach(key => {
+  ['pitch', 'roll', 'yaw'].forEach(key => {
     if (typeof pathValue.value[key] === 'number' &&
       !isNaN(pathValue.value[key])) {
       acc.push({

@@ -25,13 +25,13 @@ function makeDelta(context, values, timestamp = '2026-08-20T17:00:47.000Z') {
   }
 }
 
-function makeConverter() {
+function makeConverter(resolution = 0) {
   return deltaToPointsConverter(
     SELF_CONTEXT,
     true, // recordTrack
     true, // separateLatLon
     () => true, // shouldStore
-    0, // resolution
+    resolution,
     true // storeOthers
   )
 }
@@ -117,4 +117,46 @@ test('other null values are still stored as jsonValue', () => {
   )
   assert.equal(points.length, 1)
   assert.equal(points[0].fields.jsonValue, 'null')
+})
+
+test('a valid attitude is still stored right after a null one', () => {
+  // Skipped values must not consume the resolution window: both deltas carry
+  // the same timestamp, so the second one is only stored if the first did not
+  // update the per-path bookkeeping.
+  const converter = makeConverter(1000)
+  const context = 'vessels.recovering-attitude'
+  converter(makeDelta(context, [{ path: 'navigation.attitude', value: null }]))
+  const points = converter(
+    makeDelta(context, [
+      { path: 'navigation.attitude', value: { pitch: 0.1, roll: 0.2, yaw: 0.3 } }
+    ])
+  )
+  assert.deepEqual(
+    points.map(point => point.measurement),
+    [
+      'navigation.attitude.pitch',
+      'navigation.attitude.roll',
+      'navigation.attitude.yaw'
+    ]
+  )
+  assert.deepEqual(
+    points.map(point => point.fields.value),
+    [0.1, 0.2, 0.3]
+  )
+})
+
+test('a valid empty path value is still stored right after a null one', () => {
+  const converter = makeConverter(1000)
+  const context = 'vessels.recovering-emptypath'
+  converter(makeDelta(context, [{ path: '', value: null }]))
+  const points = converter(
+    makeDelta(context, [
+      { path: '', value: { name: 'Fortuna', mmsi: '230099999' } }
+    ])
+  )
+  assert.deepEqual(
+    points.map(point => point.measurement),
+    ['name', 'mmsi']
+  )
+  assert.equal(points[0].fields.stringValue, 'Fortuna')
 })
