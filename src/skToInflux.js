@@ -53,9 +53,14 @@ module.exports = {
             let tags = addSource(update, { context: delta.context })
 
             update.values.reduce((acc, pathValue) => {
+              if (!pathValue) {
+                return acc
+              }
 
               if (pathValue.path === 'navigation.position') {
-                if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
+                if (recordTrack &&
+                  isValidPosition(pathValue.value) &&
+                  shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
                     measurement: pathValue.path,
                     tags: tags,
@@ -126,9 +131,11 @@ module.exports = {
                     }
 
                     if (pathValue.path === '') {
-                      Object.keys(pathValue.value).forEach(key => {
-                        addPoint(key, pathValue.value[key])
-                      })
+                      if (pathValue.value !== null && typeof pathValue.value === 'object') {
+                        Object.keys(pathValue.value).forEach(key => {
+                          addPoint(key, pathValue.value[key])
+                        })
+                      }
                     } else {
                       addPoint(pathValue.path, pathValue.value)
                     }
@@ -193,6 +200,17 @@ function clearContextTimestamps(holder, maxAge) {
   })
 }
 
+function isValidPosition(value) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof value.latitude === 'number' &&
+    !isNaN(value.latitude) &&
+    typeof value.longitude === 'number' &&
+    !isNaN(value.longitude)
+  )
+}
+
 function shouldStorePositionNow(delta, sourceId, time) {
   if (!lastPositionStored[delta.context]) {
     lastPositionStored[delta.context] = {}
@@ -208,7 +226,10 @@ function shouldStoreNow(delta, pathAndSource, time, resolution) {
 
 
 function storeAttitude(date, pathValue, tags, acc) {
-  ['pitch', 'roll', 'yaw'].forEach(key => {
+  if (pathValue.value === null || typeof pathValue.value !== 'object') {
+    return
+  }
+  ;['pitch', 'roll', 'yaw'].forEach(key => {
     if (typeof pathValue.value[key] === 'number' &&
       !isNaN(pathValue.value[key])) {
       acc.push({
