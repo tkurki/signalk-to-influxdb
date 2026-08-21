@@ -53,9 +53,14 @@ module.exports = {
             let tags = addSource(update, { context: delta.context })
 
             update.values.reduce((acc, pathValue) => {
+              if (!pathValue) {
+                return acc
+              }
 
               if (pathValue.path === 'navigation.position') {
-                if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
+                if (recordTrack &&
+                  isValidPosition(pathValue.value) &&
+                  shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
                     measurement: pathValue.path,
                     tags: tags,
@@ -87,6 +92,11 @@ module.exports = {
                   lastPositionStored[delta.context][tags.source] = time
                 }
               } else {
+                if (requiresObjectValue(pathValue.path) &&
+                  (pathValue.value === null || typeof pathValue.value !== 'object')) {
+                  return acc
+                }
+
                 const pathAndSource = `${pathValue.path}-${tags.source}`
                 if (shouldStore(pathValue.path) &&
                   (pathValue.path == '' || shouldStoreNow(delta, pathAndSource, time, resolution))
@@ -191,6 +201,23 @@ function clearContextTimestamps(holder, maxAge) {
       delete holder[context]
     }
   })
+}
+
+// Paths whose value is dereferenced as an object when storing points, so a
+// null or primitive value has nothing to store.
+function requiresObjectValue(path) {
+  return path === '' || path === 'navigation.attitude'
+}
+
+function isValidPosition(value) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof value.latitude === 'number' &&
+    !isNaN(value.latitude) &&
+    typeof value.longitude === 'number' &&
+    !isNaN(value.longitude)
+  )
 }
 
 function shouldStorePositionNow(delta, sourceId, time) {
