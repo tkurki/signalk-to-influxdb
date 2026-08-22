@@ -522,3 +522,80 @@ test('getValues caches field discovery across calls for the same path', async ()
 
   assert.equal(fieldKeysCalls, 1, 'SHOW FIELD KEYS should run once per path and be cached')
 })
+
+test('getValues prefers the numeric value field when a measurement also has a stale non-numeric field, so numeric data is still returned', async () => {
+  // A numeric measurement may accumulate a stale stringValue/boolValue field
+  // from a one-off historical write. Discovery must still pick `value` and run
+  // the numeric aggregation, otherwise the History API returns empty data.
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      return fieldKeysResult([
+        ['value', 'float'],
+        ['stringValue', 'string'],
+      ])
+    }
+    // Numeric fast path: select mean(value) across the measurement.
+    assert.ok(/mean\(value\)/.test(sql), `expected mean(value) in: ${sql}`)
+    assert.ok(!/stringValue/.test(sql), `must not select stringValue: ${sql}`)
+    return numericResult('electrical.batteries.0.hydrogenerator.power', 'mean', [
+      { time: new Date('2026-08-08T00:00:00.000Z'), value: 42.1 },
+      { time: new Date('2026-08-08T00:01:00.000Z'), value: 43.2 },
+    ])
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const result = await provider.getValues({
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:02:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      { path: 'electrical.batteries.0.hydrogenerator.power', aggregate: 'average', parameter: [] },
+    ],
+  })
+
+  assert.deepEqual(result.data, [
+    ['2026-08-08T00:00:00.000Z', 42.1],
+    ['2026-08-08T00:01:00.000Z', 43.2],
+  ])
+})
+
+test('getValues prefers stringValue over a stale jsonValue field so live textual data is returned (navigation.state regression)', async () => {
+  // navigation.state accumulates a stale `jsonValue` field from a past write
+  // that stored an object, while the current live data (written by
+  // signalk-autostate) is a plain string in `stringValue`. SHOW FIELD KEYS
+  // returns jsonValue first; discovery must still pick `stringValue`, otherwise
+  // first("jsonValue") returns no rows for recent windows.
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      // jsonValue listed first, as the real InfluxDB returns it.
+      return fieldKeysResult([
+        ['jsonValue', 'string'],
+        ['stringValue', 'string'],
+      ])
+    }
+    // Per-path query must select first("stringValue"), not jsonValue.
+    assert.ok(/first\("stringValue"\)/.test(sql), `expected first("stringValue") in: ${sql}`)
+    assert.ok(!/jsonValue/.test(sql), `must not select jsonValue: ${sql}`)
+    return singleFieldResult('first', [
+      { time: new Date('2026-08-08T00:00:00.000Z'), value: 'moored' },
+      { time: new Date('2026-08-08T00:01:00.000Z'), value: 'sailing' },
+    ])
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const result = await provider.getValues({
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:02:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      { path: 'navigation.state', aggregate: 'first', parameter: [] },
+    ],
+  })
+
+  assert.deepEqual(result.data, [
+    ['2026-08-08T00:00:00.000Z', 'moored'],
+    ['2026-08-08T00:01:00.000Z', 'sailing'],
+  ])
+})

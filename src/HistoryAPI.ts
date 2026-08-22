@@ -207,11 +207,26 @@ export class InfluxHistoryProvider implements HistoryApi {
       const keys = rows.map((r) => r.fieldKey).filter((k: string) =>
         k === NUMERIC_FIELD || (NON_NUMERIC_FIELDS as readonly string[]).includes(k)
       );
-      const nonNumeric = keys.find((k: string) => k !== NUMERIC_FIELD);
-      if (nonNumeric) {
-        field = nonNumeric;
-      } else if (keys.includes(NUMERIC_FIELD)) {
+      // Prefer the numeric `value` field when present: the vast majority of
+      // Signal K paths are numeric, and a measurement may accumulate stale
+      // non-numeric fields (e.g. from a one-off bad write or a historical value
+      // type change). Only fall back to a non-numeric field when the path has
+      // never stored numbers.
+      if (keys.includes(NUMERIC_FIELD)) {
         field = NUMERIC_FIELD;
+      } else {
+        // Among non-numeric fields, prefer the v1 writer's typed fields in
+        // order (stringValue > boolValue > jsonValue). A measurement may have
+        // a stale `jsonValue` field from a past write that stored an object,
+        // while the current live data is a plain string in `stringValue` (e.g.
+        // navigation.state written by signalk-autostate). Picking by SHOW FIELD
+        // KEYS order would otherwise select the stale field and return no rows.
+        const nonNumeric = NON_NUMERIC_FIELDS.find((f: string) =>
+          keys.includes(f)
+        );
+        if (nonNumeric) {
+          field = nonNumeric;
+        }
       }
     } catch (e) {
       // Measurement may not exist (no data yet). Assume the numeric default.
