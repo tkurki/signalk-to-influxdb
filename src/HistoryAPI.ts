@@ -24,11 +24,15 @@ interface PathSpec {
   aggregateFunction: string;
   parameters: string[];
   sourceRef?: SourceRef;
+  // The InfluxDB field the path's values are stored in. The v1 writer stores
+  // numbers in `value`, strings in `stringValue`, booleans in `boolValue` and
+  // objects in `jsonValue`. Discovered per path via `SHOW FIELD KEYS`.
+  field?: string;
 }
 
-// Maps the History API aggregation methods to InfluxQL selector functions.
-// `sma` and `ema` are computed in post-processing on top of `mean` buckets,
-// matching the signalk-to-influxdb2 implementation.
+// Maps the History API aggregation methods to InfluxQL selector functions for
+// numeric (`value`) fields. `sma` and `ema` are computed in post-processing on
+// top of `mean` buckets, matching the signalk-to-influxdb2 implementation.
 const functionForAggregate: { [key: string]: string } = {
   average: "mean",
   min: "min",
@@ -38,6 +42,34 @@ const functionForAggregate: { [key: string]: string } = {
   sma: "mean",
   ema: "mean",
 };
+
+// The InfluxDB fields the v1 writer uses. `value` holds numbers; the others hold
+// strings, booleans and JSON-encoded objects respectively.
+const NUMERIC_FIELD = "value";
+const NON_NUMERIC_FIELDS = ["stringValue", "boolValue", "jsonValue"] as const;
+
+// InfluxQL aggregations that are meaningful for non-numeric fields. Only
+// first/last make sense for strings, booleans and JSON objects; average/min/max
+// and the moving-average methods require numbers. Any other method is coerced
+// to `first` for those fields, matching how navigation.position is handled.
+const NON_NUMERIC_AGGREGATES = new Set(["first", "last"]);
+
+function isNumericField(field: string | undefined): boolean {
+  return field === undefined || field === NUMERIC_FIELD;
+}
+
+// Returns the InfluxQL selector function to use for a path spec, taking its
+// field into account. Numeric fields keep the requested aggregation; for
+// non-numeric fields only `first`/`last` are valid and anything else is
+// coerced to `first`.
+function aggregateFunctionFor(spec: PathSpec): string {
+  if (isNumericField(spec.field)) {
+    return functionForAggregate[spec.aggregateMethod] || "mean";
+  }
+  return NON_NUMERIC_AGGREGATES.has(functionForAggregate[spec.aggregateMethod] || "")
+    ? functionForAggregate[spec.aggregateMethod]
+    : "first";
+}
 
 function resolveEmaParams(spec: PathSpec): { period: number; alpha: number } {
   const rawParam =
@@ -87,6 +119,23 @@ function extractPosition(row: any): [number, number] | null {
   return null;
 }
 
+// Decodes a raw InfluxQL cell value according to the field it was read from.
+// `value` and `stringValue`/`boolValue` are returned as-is; `jsonValue` holds a
+// JSON-encoded object and is parsed back into the original value.
+function decodeValue(raw: any, field?: string): any {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  if (field === "jsonValue" && typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return raw;
+    }
+  }
+  return raw;
+}
+
 /**
  * History API provider backed by an InfluxDB 1.x instance.
  *
@@ -97,11 +146,80 @@ function extractPosition(row: any): [number, number] | null {
  * v1 data model (position stored as `jsonValue`, numerics as `value`).
  */
 export class InfluxHistoryProvider implements HistoryApi {
+  // Cache of path -> InfluxDB field key, populated lazily via SHOW FIELD KEYS.
+  private fieldCache = new Map<string, string>();
+
   constructor(
     private influxP: Promise<InfluxDB>,
     private selfId: string,
     private debug: (s: string) => void
   ) {}
+
+  // Resolves the InfluxDB field each path stores its values in (via
+  // `SHOW FIELD KEYS`), caches the result, and rewrites each path spec's
+  // `aggregateFunction` to a selector that is valid for that field. Numeric
+  // (`value`) fields keep the requested aggregation; non-numeric fields are
+  // restricted to `first`/`last`, and any other method is coerced to `first`.
+  private async resolveFields(pathSpecs: PathSpec[]): Promise<void> {
+    const uniquePaths = Array.from(
+      new Set(
+        pathSpecs
+          .filter(({ path }) => path !== "navigation.position")
+          .map(({ path }) => path)
+      )
+    );
+    if (uniquePaths.length === 0) {
+      return;
+    }
+
+    const influx = await this.influxP;
+    await Promise.all(
+      uniquePaths.map(async (path) => {
+        const field = await this.discoverField(influx, path);
+        pathSpecs.forEach((spec) => {
+          if (spec.path === path && spec.path !== "navigation.position") {
+            spec.field = field;
+            spec.aggregateFunction = aggregateFunctionFor(spec);
+          }
+        });
+      })
+    );
+  }
+
+  // Returns the InfluxDB field key a measurement stores its values in.
+  // `SHOW FIELD KEYS FROM "<path>"` lists the measurement's fields; the v1
+  // writer writes exactly one of `value`/`stringValue`/`boolValue`/`jsonValue`
+  // per point, so we pick the typed field when present and fall back to
+  // `value` (the historic numeric default).
+  private async discoverField(
+    influx: InfluxDB,
+    path: string
+  ): Promise<string> {
+    const cached = this.fieldCache.get(path);
+    if (cached) {
+      return cached;
+    }
+    let field = NUMERIC_FIELD;
+    try {
+      const rows: any[] = (await influx.query(
+        `SHOW FIELD KEYS FROM "${path}"`
+      )) as any[];
+      const keys = rows.map((r) => r.fieldKey).filter((k: string) =>
+        k === NUMERIC_FIELD || (NON_NUMERIC_FIELDS as readonly string[]).includes(k)
+      );
+      const nonNumeric = keys.find((k: string) => k !== NUMERIC_FIELD);
+      if (nonNumeric) {
+        field = nonNumeric;
+      } else if (keys.includes(NUMERIC_FIELD)) {
+        field = NUMERIC_FIELD;
+      }
+    } catch (e) {
+      // Measurement may not exist (no data yet). Assume the numeric default.
+      this.debug(`SHOW FIELD KEYS failed for ${path}: ${(e as Error).message}`);
+    }
+    this.fieldCache.set(path, field);
+    return field;
+  }
 
   async getValues(query: ValuesRequest): Promise<ValuesResponse> {
     const { from, to } = getTimeRange(query);
@@ -123,6 +241,12 @@ export class InfluxHistoryProvider implements HistoryApi {
       };
     });
 
+    // Discover which InfluxDB field each non-position path stores its values
+    // in, then adjust the aggregate function accordingly: only `first`/`last`
+    // are meaningful for textual, boolean and JSON values, so any numeric-only
+    // method is coerced to `first` for those fields.
+    await this.resolveFields(pathSpecs);
+
     const positionPathSpecs = pathSpecs
       .filter(({ path }) => path === "navigation.position")
       .slice(0, 1);
@@ -132,9 +256,10 @@ export class InfluxHistoryProvider implements HistoryApi {
     const needsCollation =
       nonPositionPathSpecs.length > 0 && positionPathSpecs.length > 0;
 
-    // Calculate extended query window for SMA and EMA.
+    // Calculate extended query window for SMA and EMA. Only numeric fields
+    // support moving averages; non-numeric specs were coerced to `first`.
     const maxSmaWindow = nonPositionPathSpecs.reduce((max, spec) => {
-      if (spec.aggregateMethod === "sma") {
+      if (spec.aggregateMethod === "sma" && isNumericField(spec.field)) {
         const windowSize =
           spec.parameters.length > 0 ? parseInt(spec.parameters[0], 10) : 5;
         return Math.max(max, windowSize);
@@ -143,7 +268,7 @@ export class InfluxHistoryProvider implements HistoryApi {
     }, 0);
 
     const maxEmaWindow = nonPositionPathSpecs.reduce((max, spec) => {
-      if (spec.aggregateMethod === "ema") {
+      if (spec.aggregateMethod === "ema" && isNumericField(spec.field)) {
         const { period } = resolveEmaParams(spec);
         return Math.max(max, Math.ceil(period * 4));
       }
@@ -447,8 +572,8 @@ export class InfluxHistoryProvider implements HistoryApi {
     });
   }
 
-  // Runs a single InfluxQL query for path specs that share one source (or none),
-  // returning rows in the same column order as `pathSpecs`.
+  // Runs a single InfluxQL query for path specs that share one source (or
+  // none), returning rows in the same column order as `pathSpecs`.
   private querySourceGroup(
     context: Context,
     from: ZonedDateTime,
@@ -458,6 +583,24 @@ export class InfluxHistoryProvider implements HistoryApi {
     needsCollation: boolean,
     sourceRef?: string
   ): Promise<DataResult> {
+    // When every spec reads the numeric `value` field we can use a single
+    // multi-measurement query (the original, fast path). When any spec reads a
+    // non-numeric field (stringValue/boolValue/jsonValue), InfluxQL's single
+    // field list applies to all measurements in a multi-measurement SELECT, so
+    // we instead run one query per path and collate the results by timestamp.
+    const allNumeric = pathSpecs.every((ps) => isNumericField(ps.field));
+    if (!allNumeric) {
+      return this.querySourceGroupPerPath(
+        context,
+        from,
+        to,
+        timeResolutionMillis,
+        pathSpecs,
+        needsCollation,
+        sourceRef
+      );
+    }
+
     const start = Date.now();
 
     const uniquePaths = pathSpecs.reduce<string[]>((acc, ps) => {
@@ -480,7 +623,7 @@ export class InfluxHistoryProvider implements HistoryApi {
     const query = `
   select
     ${uniqueAggregates
-      .map((aggregateFunction) => `${aggregateFunction}(value)`)
+      .map((aggregateFunction) => `${aggregateFunction}(${NUMERIC_FIELD})`)
       .join(",")}
   from
     ${uniquePaths.map((s) => `"${s}"`).join(",")}
@@ -529,6 +672,95 @@ export class InfluxHistoryProvider implements HistoryApi {
           data: resultData as DataRow[],
         };
       });
+  }
+
+  // Runs one InfluxQL query per path (single measurement) and collates the
+  // results by timestamp into the original column order of `pathSpecs`. Used
+  // when one or more specs read a non-numeric field, since InfluxQL applies a
+  // single field list across all measurements in a multi-measurement SELECT.
+  private querySourceGroupPerPath(
+    context: Context,
+    from: ZonedDateTime,
+    to: ZonedDateTime,
+    timeResolutionMillis: number,
+    pathSpecs: PathSpec[],
+    needsCollation: boolean,
+    sourceRef?: string
+  ): Promise<DataResult> {
+    const sourceClause = sourceRef
+      ? `\n    and\n    "source" = '${sourceRef}'`
+      : "";
+    const fromStr = from.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    const toStr = to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    const fillClause = !needsCollation ? " fill(none)" : "";
+
+    // Collapse duplicate specs (same path+field+aggregate) into a single query;
+    // remember which output columns each query feeds so we can fan values out.
+    const perPath = new Map<
+      string,
+      { spec: PathSpec; indices: number[] }
+    >();
+    pathSpecs.forEach((ps, i) => {
+      const key = `${ps.path}|${ps.field}|${ps.aggregateFunction}`;
+      let entry = perPath.get(key);
+      if (!entry) {
+        entry = { spec: ps, indices: [] };
+        perPath.set(key, entry);
+      }
+      entry.indices.push(i);
+    });
+
+    const queryPromises = Array.from(perPath.values()).map(({ spec, indices }) =>
+      this.influxP
+        .then((influx) =>
+          influx.query(`
+  select
+    ${spec.aggregateFunction}("${spec.field}")
+  from
+    "${spec.path}"
+  where
+    "context" = '${context}'
+    and
+    time >= '${fromStr}Z'
+    and
+   time <= '${toStr}Z'${sourceClause}
+  group by time(${timeResolutionMillis}ms)${fillClause}`)
+        )
+        .then((rows: any[]) => ({ spec, indices, rows }))
+    );
+
+    return Promise.all(queryPromises).then((results) => {
+      const tsSet = new Set<string>();
+      results.forEach(({ rows }) =>
+        rows.forEach((r: any) => tsSet.add(r.time.toISOString()))
+      );
+      const allTs = Array.from(tsSet).sort();
+      const rowByTs = new Map<string, any[]>();
+      allTs.forEach((ts) => {
+        const row: any[] = new Array(pathSpecs.length + 1).fill(null);
+        row[0] = ts;
+        rowByTs.set(ts, row);
+      });
+
+      results.forEach(({ spec, indices, rows }) => {
+        rows.forEach((row: any) => {
+          const ts = row.time.toISOString();
+          const target = rowByTs.get(ts);
+          if (!target) {
+            return;
+          }
+          const decoded = decodeValue(row[spec.aggregateFunction], spec.field);
+          indices.forEach((originalIndex) => {
+            target[originalIndex + 1] = decoded;
+          });
+        });
+      });
+
+      return {
+        values: valuesForSpecs(pathSpecs),
+        data: allTs.map((ts) => rowByTs.get(ts)) as DataRow[],
+      };
+    });
   }
 }
 
@@ -585,10 +817,10 @@ function applyMovingAveragePostProcessing(
 
   const smaIndices = pathSpecs
     .map((spec, idx) => ({ spec, idx }))
-    .filter(({ spec }) => spec.aggregateMethod === "sma");
+    .filter(({ spec }) => spec.aggregateMethod === "sma" && isNumericField(spec.field));
   const emaIndices = pathSpecs
     .map((spec, idx) => ({ spec, idx }))
-    .filter(({ spec }) => spec.aggregateMethod === "ema");
+    .filter(({ spec }) => spec.aggregateMethod === "ema" && isNumericField(spec.field));
 
   if (smaIndices.length === 0 && emaIndices.length === 0) {
     const requestedFromMs = new Date(requestedFromTimestamp).toISOString();

@@ -41,6 +41,19 @@ function positionResult(rows) {
   }))
 }
 
+// Builds a `SHOW FIELD KEYS FROM "<measurement>"` result for the mock client:
+// an array of { fieldKey, fieldType } rows, one per field the measurement has.
+function fieldKeysResult(fields) {
+  return fields.map(([fieldKey, fieldType]) => ({ fieldKey, fieldType }))
+}
+
+// Builds a per-path single-field aggregation result, where each row carries
+// the aggregated value under the aggregate-function field name (e.g. `first`).
+// Used for non-numeric paths that are queried one measurement at a time.
+function singleFieldResult(aggregateFunction, rows) {
+  return rows.map((r) => ({ time: r.time, [aggregateFunction]: r.value }))
+}
+
 const noopDebug = () => undefined
 
 test('InfluxHistoryProvider implements the HistoryApi provider contract', () => {
@@ -332,4 +345,180 @@ test('getPaths returns the list of measurements', async () => {
     'navigation.speedOverGround',
     'environment.wind.speedTrue',
   ])
+})
+
+// --- textual / boolean / JSON value handling ---------------------------------
+//
+// The v1 writer stores strings in `stringValue`, booleans in `boolValue` and
+// objects in `jsonValue`; only numbers go into `value`. The provider discovers
+// each path's field via `SHOW FIELD KEYS`, selects it, and decodes the result.
+
+test('getValues returns string values by discovering and selecting the stringValue field, coercing average to first', async () => {
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      return fieldKeysResult([['stringValue', 'string']])
+    }
+    // Per-path query: select first("stringValue") ...
+    assert.ok(/first\("stringValue"\)/.test(sql), `expected first("stringValue") in: ${sql}`)
+    return singleFieldResult('first', [
+      { time: new Date('2026-08-08T00:00:00.000Z'), value: 'normal' },
+      { time: new Date('2026-08-08T00:01:00.000Z'), value: 'alert' },
+    ])
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const result = await provider.getValues({
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:02:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      // `average` is meaningless for strings and must be coerced to `first`.
+      { path: 'notifications.mobility.state', aggregate: 'average', parameter: [] },
+    ],
+  })
+
+  assert.deepEqual(result.values, [
+    { path: 'notifications.mobility.state', method: 'average' },
+  ])
+  assert.deepEqual(result.data, [
+    ['2026-08-08T00:00:00.000Z', 'normal'],
+    ['2026-08-08T00:01:00.000Z', 'alert'],
+  ])
+})
+
+test('getValues returns boolean values from the boolValue field and honors the requested first/last method', async () => {
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      return fieldKeysResult([['boolValue', 'boolean']])
+    }
+    assert.ok(/last\("boolValue"\)/.test(sql), `expected last("boolValue") in: ${sql}`)
+    return singleFieldResult('last', [
+      { time: new Date('2026-08-08T00:00:00.000Z'), value: false },
+      { time: new Date('2026-08-08T00:01:00.000Z'), value: true },
+    ])
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const result = await provider.getValues({
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:02:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      { path: 'electrical.batteries.0.charging', aggregate: 'last', parameter: [] },
+    ],
+  })
+
+  assert.deepEqual(result.data, [
+    ['2026-08-08T00:00:00.000Z', false],
+    ['2026-08-08T00:01:00.000Z', true],
+  ])
+})
+
+test('getValues decodes jsonValue objects back into their original value', async () => {
+  const payload = { state: 'normal', message: 'all good', method: ['visual'] }
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      return fieldKeysResult([['jsonValue', 'string']])
+    }
+    return singleFieldResult('first', [
+      { time: new Date('2026-08-08T00:00:00.000Z'), value: JSON.stringify(payload) },
+    ])
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const result = await provider.getValues({
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:02:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      { path: 'notifications.mobility', aggregate: 'first', parameter: [] },
+    ],
+  })
+
+  assert.deepEqual(result.data, [
+    ['2026-08-08T00:00:00.000Z', payload],
+  ])
+})
+
+test('getValues collates a numeric and a textual path in a single response', async () => {
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      // Different fields per path -> per-path query path is taken.
+      if (sql.includes('navigation.speedOverGround')) {
+        return fieldKeysResult([['value', 'float']])
+      }
+      if (sql.includes('notifications.mobility.state')) {
+        return fieldKeysResult([['stringValue', 'string']])
+      }
+      return []
+    }
+    if (sql.includes('navigation.speedOverGround')) {
+      assert.ok(/mean\("value"\)/.test(sql), `numeric path should select mean("value"): ${sql}`)
+      return singleFieldResult('mean', [
+        { time: new Date('2026-08-08T00:00:00.000Z'), value: 5.1 },
+        { time: new Date('2026-08-08T00:01:00.000Z'), value: 5.4 },
+      ])
+    }
+    if (sql.includes('notifications.mobility.state')) {
+      assert.ok(/first\("stringValue"\)/.test(sql), `text path should select first("stringValue"): ${sql}`)
+      return singleFieldResult('first', [
+        { time: new Date('2026-08-08T00:00:00.000Z'), value: 'normal' },
+        { time: new Date('2026-08-08T00:02:00.000Z'), value: 'alert' },
+      ])
+    }
+    return []
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const result = await provider.getValues({
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:03:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      { path: 'navigation.speedOverGround', aggregate: 'average', parameter: [] },
+      { path: 'notifications.mobility.state', aggregate: 'average', parameter: [] },
+    ],
+  })
+
+  assert.deepEqual(result.values.map((v) => v.path), [
+    'navigation.speedOverGround',
+    'notifications.mobility.state',
+  ])
+  assert.deepEqual(result.data, [
+    ['2026-08-08T00:00:00.000Z', 5.1, 'normal'],
+    ['2026-08-08T00:01:00.000Z', 5.4, null],
+    ['2026-08-08T00:02:00.000Z', null, 'alert'],
+  ])
+})
+
+test('getValues caches field discovery across calls for the same path', async () => {
+  let fieldKeysCalls = 0
+  const influx = makeMockInflux((sql) => {
+    if (sql.startsWith('SHOW FIELD KEYS')) {
+      fieldKeysCalls++
+      return fieldKeysResult([['stringValue', 'string']])
+    }
+    return singleFieldResult('first', [
+      { time: new Date('2026-08-08T00:00:00.000Z'), value: 'normal' },
+    ])
+  })
+  const provider = new InfluxHistoryProvider(influx, SELF_ID, noopDebug)
+
+  const req = {
+    from: Temporal.Instant.from('2026-08-08T00:00:00.000Z'),
+    to: Temporal.Instant.from('2026-08-08T00:01:00.000Z'),
+    context: SELF_CONTEXT,
+    resolution: 60,
+    pathSpecs: [
+      { path: 'notifications.mobility.state', aggregate: 'first', parameter: [] },
+    ],
+  }
+  await provider.getValues(req)
+  await provider.getValues(req)
+
+  assert.equal(fieldKeysCalls, 1, 'SHOW FIELD KEYS should run once per path and be cached')
 })
