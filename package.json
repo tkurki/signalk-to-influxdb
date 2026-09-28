@@ -18,7 +18,7 @@
   "author": "Teppo Kurki <teppo.kurki@iki.fi>",
   "license": "ISC",
   "signalk": {
-    "appIcon": "./doc/icon.png",
+    "appIcon": "./doc/icon-256.png",
     "displayName": "Signal K to InfluxDb 1.x"
   },
   "dependencies": {
