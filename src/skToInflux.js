@@ -29,7 +29,21 @@ function addSource(update, tags) {
   return tags
 }
 
+// node-influx (5.x) writes point.measurement into the line protocol as-is,
+// without escaping. Signal K paths can contain spaces or commas (e.g.
+// "providers.My Compass.deltaRate"), which then break parsing on the InfluxDB
+// side ("invalid boolean", "missing fields", ...) and fail the whole batch.
+// Escape them here, just before writing; the stored measurement name is the
+// unescaped path.
+function escapeMeasurements(points) {
+  return points.map(point => ({
+    ...point,
+    measurement: Influx.escape.measurement(point.measurement)
+  }))
+}
+
 module.exports = {
+  escapeMeasurements,
   deltaToPointsConverter: (
     selfContext,
     recordTrack,
