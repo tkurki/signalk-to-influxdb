@@ -1,17 +1,34 @@
 const test = require('node:test')
+const http = require('node:http')
 const assert = require('node:assert')
 const Influx = require('influx')
 const { escapeMeasurements } = require('../built/skToInflux')
 
-// Captures the line protocol body node-influx would POST to /write.
-function captureLineProtocol(points) {
-  const client = new Influx.InfluxDB({ host: 'localhost', database: 'test' })
+// Captures the line protocol body node-influx POSTs to /write, using a local
+// HTTP server so the test doesn't depend on node-influx internals.
+async function captureLineProtocol(points) {
   let body
-  client._pool.discard = opts => {
-    body = opts.body
-    return Promise.resolve()
+  const server = http.createServer((req, res) => {
+    let data = ''
+    req.on('data', chunk => { data += chunk })
+    req.on('end', () => {
+      if (req.url.startsWith('/write')) body = data
+      res.statusCode = 204
+      res.end()
+    })
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const client = new Influx.InfluxDB({
+      host: '127.0.0.1',
+      port: server.address().port,
+      database: 'test'
+    })
+    await client.writePoints(points)
+  } finally {
+    await new Promise(resolve => server.close(resolve))
   }
-  return client.writePoints(points).then(() => body)
+  return body
 }
 
 test('escapeMeasurements escapes spaces and commas in measurement names', async () => {
