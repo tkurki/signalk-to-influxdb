@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-const { deltaToPointsConverter, influxClientP, pruneTimestamps } = require('./skToInflux')
+const { deltaToPointsConverter, influxClientP, pruneTimestamps, escapeMeasurements } = require('./skToInflux')
 
 import { InfluxHistoryProvider } from './HistoryAPI'
 
@@ -400,7 +400,7 @@ module.exports = function (app) {
                 if (app.setPluginStatus) {
                   app.setPluginStatus(`Connected to ${options.protocol}://${options.host}:${options.port}/${options.database}. Writing ~${throughput} pts/s. Last: ${thePoints.length} pts (${plugin.totalPointsWritten} total)`)
                 }
-                return client.writePoints(thePoints)
+                return client.writePoints(escapeMeasurements(thePoints))
               })
               .catch(error => {
                 logError(error)
